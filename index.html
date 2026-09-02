@@ -5,6 +5,28 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gestione Clienti & Polizze</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+<script type="module">
+  // ===== FIREBASE CONFIG =====
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAxxoiE1aYoxoPlULiCla7MDEhq7SSahfw",
+    authDomain: "gestionale-albano.firebaseapp.com",
+    projectId: "gestionale-albano",
+    storageBucket: "gestionale-albano.firebasestorage.app",
+    messagingSenderId: "348591040118",
+    appId: "1:348591040118:web:4840bb13aeac981b0d6157"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const fdb = getFirestore(app);
+
+  // Espongo le funzioni Firebase globalmente
+  window._fb = { fdb, doc, getDoc, setDoc, onSnapshot, collection, getDocs };
+  window._fbReady = true;
+  window.dispatchEvent(new Event('fbReady'));
+</script>
 <style>
 :root{--bg:#ffffff;--bg2:#f5f5f4;--bg3:#eeece8;--text:#1a1a1a;--text2:#6b6b6b;--text3:#9a9a9a;--border:rgba(0,0,0,0.12);--border2:rgba(0,0,0,0.22);--r:8px;--rl:12px;--font:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;--kdrive:#0098FF}
 @media(prefers-color-scheme:dark){:root{--bg:#1c1c1c;--bg2:#272727;--bg3:#313131;--text:#f0f0f0;--text2:#aaaaaa;--text3:#777777;--border:rgba(255,255,255,0.12);--border2:rgba(255,255,255,0.22)}}
@@ -203,6 +225,12 @@ textarea{resize:vertical;height:55px}
 .perm-row{display:flex;align-items:center;justify-content:space-between;padding:.5rem .75rem;background:var(--bg2);border-radius:var(--r);gap:8px;border:0.5px solid var(--border)}
 .perm-row label{font-size:13px;cursor:pointer;flex:1;margin:0}
 
+/* ===== SYNC INDICATOR ===== */
+.sync-indicator{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:3px 8px;border-radius:20px;font-weight:500}
+.sync-indicator.ok{background:#EAF3DE;color:#3B6D11}
+.sync-indicator.saving{background:#FAEEDA;color:#854F0B}
+.sync-indicator.offline{background:#FCEBEB;color:#A32D2D}
+.sync-indicator.loading{background:var(--bg2);color:var(--text2)}
 /* ===== RICERCA AVANZATA ===== */
 .filtri-avanzati{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--rl);padding:1rem 1.25rem;margin-bottom:1rem}
 .filtri-avanzati-title{font-size:12px;font-weight:500;color:var(--text2);margin-bottom:.75rem;display:flex;align-items:center;gap:6px}
@@ -258,6 +286,7 @@ textarea{resize:vertical;height:55px}
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <span style="font-size:12px;color:var(--text2)" id="data-oggi"></span>
       <div class="user-badge" id="user-badge"></div>
+      <span class="sync-indicator loading" id="sync-badge"><i class="ti ti-cloud"></i> Connessione...</span>
       <button class="btn-sm" onclick="doLogout()" style="font-size:11px;padding:4px 10px"><i class="ti ti-logout"></i> Esci</button>
     </div>
   </div>
@@ -671,8 +700,94 @@ let editCId=null,editPId=null,editPCli=null;
 const PALETTE=['#185FA5','#3B6D11','#A32D2D','#854F0B','#533AB7','#0F6E56','#993C1D','#72243E','#5F5E5A','#D4537E'];
 let selColor=PALETTE[0];
 
-function load(){try{const r=localStorage.getItem(SK);if(r)db=JSON.parse(r);else db={clienti:[],tipologie:defaultTip()};}catch(e){db={clienti:[],tipologie:defaultTip()};}}
-function save(){try{localStorage.setItem(SK,JSON.stringify(db));}catch(e){}}
+// ===== FIREBASE DATA LAYER =====
+let _fbSaveTimer=null;
+let _fbListenerActive=false;
+
+function setSyncBadge(stato){
+  const el=document.getElementById('sync-badge');if(!el)return;
+  const map={
+    ok:{cls:'ok',icon:'ti-cloud-check',txt:'Sincronizzato'},
+    saving:{cls:'saving',icon:'ti-cloud-upload',txt:'Salvataggio...'},
+    offline:{cls:'offline',icon:'ti-cloud-off',txt:'Offline'},
+    loading:{cls:'loading',icon:'ti-cloud',txt:'Connessione...'}
+  };
+  const s=map[stato]||map.loading;
+  el.className='sync-indicator '+s.cls;
+  el.innerHTML=`<i class="ti ${s.icon}"></i> ${s.txt}`;
+}
+
+async function load(){
+  // Carico prima da localStorage come fallback immediato
+  try{const r=localStorage.getItem(SK);if(r)db=JSON.parse(r);}catch(e){}
+  if(!db||!db.clienti)db={clienti:[],tipologie:defaultTip()};
+
+  // Poi provo Firebase
+  if(!window._fbReady){
+    window.addEventListener('fbReady',()=>load(),{once:true});
+    return;
+  }
+  try{
+    const {fdb,doc,getDoc,onSnapshot}=window._fb;
+    const ref=doc(fdb,'agenzia','dati');
+    const snap=await getDoc(ref);
+    if(snap.exists()){
+      db=snap.data();
+      if(!db.clienti)db.clienti=[];
+      if(!db.tipologie)db.tipologie=defaultTip();
+      localStorage.setItem(SK,JSON.stringify(db));
+    } else {
+      // Prima volta: salvo i dati locali su Firebase
+      await setDoc(ref,db);
+    }
+    setSyncBadge('ok');
+
+    // Listener in tempo reale
+    if(!_fbListenerActive){
+      _fbListenerActive=true;
+      onSnapshot(ref,(snap)=>{
+        if(snap.exists()){
+          const nuovi=snap.data();
+          // Aggiorno solo se diverso (evito loop)
+          if(JSON.stringify(nuovi)!==JSON.stringify(db)){
+            db=nuovi;
+            if(!db.clienti)db.clienti=[];
+            if(!db.tipologie)db.tipologie=defaultTip();
+            localStorage.setItem(SK,JSON.stringify(db));
+            renderStats();renderOggi();
+            const tabAttivo=document.querySelector('.tab.active');
+            if(tabAttivo&&tabAttivo.textContent.includes('Clienti'))renderClienti();
+            setSyncBadge('ok');
+          }
+        }
+      });
+    }
+  } catch(e){
+    console.warn('Firebase non disponibile, uso localStorage',e);
+    setSyncBadge('offline');
+  }
+}
+
+async function save(){
+  // Salvo sempre su localStorage come backup immediato
+  try{localStorage.setItem(SK,JSON.stringify(db));}catch(e){}
+
+  // Salvo su Firebase con debounce (evito troppe scritture consecutive)
+  if(_fbSaveTimer)clearTimeout(_fbSaveTimer);
+  setSyncBadge('saving');
+  _fbSaveTimer=setTimeout(async()=>{
+    if(!window._fbReady){setSyncBadge('offline');return;}
+    try{
+      const {fdb,doc,setDoc}=window._fb;
+      const ref=doc(fdb,'agenzia','dati');
+      await setDoc(ref,db);
+      setSyncBadge('ok');
+    }catch(e){
+      console.warn('Errore salvataggio Firebase',e);
+      setSyncBadge('offline');
+    }
+  },800);
+}
 function defaultTip(){return[{id:'t1',nome:'Auto',colore:'#185FA5'},{id:'t2',nome:'Casa',colore:'#3B6D11'},{id:'t3',nome:'Vita',colore:'#533AB7'},{id:'t4',nome:'Salute',colore:'#0F6E56'},{id:'t5',nome:'RC Professionale',colore:'#854F0B'},{id:'t6',nome:'Infortuni',colore:'#A32D2D'}];}
 
 function oggi(){const d=new Date();d.setHours(0,0,0,0);return d;}
@@ -1085,8 +1200,36 @@ function eliminaDocumento(cid,did){if(!confirm('Rimuovere questo documento dal g
 const USK='gcp_users_v1';const SSK='gcp_session_v1';
 let utenti=[];let utenteCorrente=null;let editUId=null;
 async function hashPwd(pwd){const enc=new TextEncoder();const buf=await crypto.subtle.digest('SHA-256',enc.encode(pwd));return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');}
-function loadUtenti(){try{const r=localStorage.getItem(USK);if(r)utenti=JSON.parse(r);}catch(e){utenti=[];}if(!utenti.length){hashPwd('admin123').then(h=>{utenti=[{id:'u1',nome:'Titolare',username:'admin',ruolo:'titolare',pwdHash:h,perm:{econ:true,doc:true,notif:true,modifica:true}}];saveUtenti();});}}
-function saveUtenti(){try{localStorage.setItem(USK,JSON.stringify(utenti));}catch(e){}}
+async function loadUtenti(){
+  // Prima localStorage
+  try{const r=localStorage.getItem(USK);if(r)utenti=JSON.parse(r);}catch(e){utenti=[];}
+
+  // Poi Firebase
+  if(window._fbReady){
+    try{
+      const {fdb,doc,getDoc}=window._fb;
+      const ref=doc(fdb,'agenzia','utenti');
+      const snap=await getDoc(ref);
+      if(snap.exists()){
+        utenti=snap.data().lista||[];
+        localStorage.setItem(USK,JSON.stringify(utenti));
+      }
+    }catch(e){console.warn('loadUtenti Firebase fallback localStorage',e);}
+  }
+
+  if(!utenti.length){
+    const h=await hashPwd('admin123');
+    utenti=[{id:'u1',nome:'Titolare',username:'admin',ruolo:'titolare',pwdHash:h,perm:{econ:true,doc:true,notif:true,modifica:true}}];
+    saveUtenti();
+  }
+}
+function saveUtenti(){
+  try{localStorage.setItem(USK,JSON.stringify(utenti));}catch(e){}
+  if(window._fbReady){
+    const {fdb,doc,setDoc}=window._fb;
+    setDoc(doc(fdb,'agenzia','utenti'),{lista:utenti}).catch(e=>console.warn('saveUtenti Firebase',e));
+  }
+}
 function loadSession(){try{const r=sessionStorage.getItem(SSK);if(r){utenteCorrente=JSON.parse(r);return true;}}catch(e){}return false;}
 function saveSession(){try{sessionStorage.setItem(SSK,JSON.stringify(utenteCorrente));}catch(e){}}
 function clearSession(){try{sessionStorage.removeItem(SSK);}catch(e){}utenteCorrente=null;}
