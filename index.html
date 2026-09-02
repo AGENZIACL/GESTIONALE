@@ -5,11 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gestione Clienti & Polizze</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
-<script type="module">
-  // ===== FIREBASE CONFIG =====
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
+<!-- Firebase SDK compatibile con tutti i browser -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script>
   const firebaseConfig = {
     apiKey: "AIzaSyAxxoiE1aYoxoPlULiCla7MDEhq7SSahfw",
     authDomain: "gestionale-albano.firebaseapp.com",
@@ -18,12 +17,17 @@
     messagingSenderId: "348591040118",
     appId: "1:348591040118:web:4840bb13aeac981b0d6157"
   };
+  firebase.initializeApp(firebaseConfig);
+  const _firestore = firebase.firestore();
 
-  const app = initializeApp(firebaseConfig);
-  const fdb = getFirestore(app);
-
-  // Espongo le funzioni Firebase globalmente
-  window._fb = { fdb, doc, getDoc, setDoc, onSnapshot, collection, getDocs };
+  // Adatto le funzioni all'API compat
+  window._fb = {
+    fdb: _firestore,
+    doc: (db, ...path) => db.doc(path.join('/')),
+    getDoc: async (ref) => { const s = await ref.get(); return {exists: ()=>s.exists, data: ()=>s.data(), id: s.id}; },
+    setDoc: (ref, data) => ref.set(data, {merge: true}),
+    onSnapshot: (ref, cb) => ref.onSnapshot(snap => cb({exists: ()=>snap.exists, data: ()=>snap.data, id: snap.id})),
+  };
   window._fbReady = true;
   window.dispatchEvent(new Event('fbReady'));
 </script>
