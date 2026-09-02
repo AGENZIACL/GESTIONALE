@@ -6,7 +6,166 @@
 <title>Gestione Clienti & Polizze</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
 <!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js">
+
+/* ========== CONTABILITÀ ========== */
+function anniDisponibili(){
+  const anni=new Set();
+  db.clienti.forEach(c=>c.polizze.forEach(p=>{
+    if(p.scad){const a=p.scad.substring(0,4);if(a)anni.add(a);}
+    if(p.dec){const a=p.dec.substring(0,4);if(a)anni.add(a);}
+  }));
+  return Array.from(anni).sort().reverse();
+}
+
+function inizContabilita(){
+  const sel=document.getElementById('cont-anno');if(!sel)return;
+  const cur=sel.value;
+  const anni=anniDisponibili();
+  sel.innerHTML='<option value="">Tutti gli anni</option>'+anni.map(a=>'<option value="'+a+'">'+a+'</option>').join('');
+  if(cur)sel.value=cur;
+}
+
+function calcolaContabilitaCliente(c, annoFiltro){
+  const polizze=c.polizze.filter(p=>{
+    if(p.stato==='annullata')return false;
+    if(annoFiltro){
+      const anno=p.scad?p.scad.substring(0,4):p.dec?p.dec.substring(0,4):'';
+      if(anno!==annoFiltro)return false;
+    }
+    return true;
+  });
+  let tot={premio:0,lettera:0,fattura:0,fatturainterm:0,provv:0};
+  polizze.forEach(p=>{
+    tot.premio+=parseFloat(p.premio)||0;
+    if(p.lettera)tot.lettera+=parseFloat(p.letteraImp)||0;
+    if(p.fattura)tot.fattura+=parseFloat(p.fatturaImp)||0;
+    if(p.fatturainterm)tot.fatturainterm+=parseFloat(p.fatturaIntermImp)||0;
+    if(p.provv)tot.provv+=parseFloat(p.provvImp)||0;
+  });
+  return{polizze,tot};
+}
+
+function sezioneContabileCliente(c){
+  const annoFiltro='';
+  const {polizze,tot}=calcolaContabilitaCliente(c,annoFiltro);
+  if(!polizze.length)return'';
+  const totComp=tot.lettera+tot.fattura+tot.fatturainterm+tot.provv;
+  const totGen=tot.premio+totComp;
+
+  let righe=polizze.map(p=>{
+    const tip=tipById(p.tipo);
+    const pr=parseFloat(p.premio)||0;
+    const let_=p.lettera?(parseFloat(p.letteraImp)||0):0;
+    const fat=p.fattura?(parseFloat(p.fatturaImp)||0):0;
+    const fi=p.fatturainterm?(parseFloat(p.fatturaIntermImp)||0):0;
+    const pv=p.provv?(parseFloat(p.provvImp)||0):0;
+    const totP=pr+let_+fat+fi+pv;
+    return '<tr>'
+      +'<td>'+tip.nome+(p.num?' <span style="font-size:10px;color:var(--text3)">'+p.num+'</span>':'')+'</td>'
+      +'<td class="num">'+(pr?fmtE(pr):'<span class="zero">—</span>')+'</td>'
+      +'<td class="num">'+(let_?fmtE(let_):'<span class="zero">—</span>')+'</td>'
+      +'<td class="num">'+(fat?fmtE(fat):'<span class="zero">—</span>')+'</td>'
+      +'<td class="num">'+(fi?fmtE(fi):'<span class="zero">—</span>')+'</td>'
+      +'<td class="num">'+(pv?fmtE(pv):'<span class="zero">—</span>')+'</td>'
+      +'<td class="num" style="font-weight:500">'+fmtE(totP)+'</td>'
+      +'</tr>';
+  }).join('');
+
+  return '<div style="margin-top:.75rem;padding-top:.75rem;border-top:0.5px solid var(--border)">'
+    +'<div style="font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px"><i class="ti ti-report-money"></i> Riepilogo contabile</div>'
+    +'<div style="overflow-x:auto">'
+    +'<table class="cont-table">'
+    +'<thead><tr><th>Polizza</th><th style="text-align:right">Premio</th><th style="text-align:right">Lettera</th><th style="text-align:right">Fattura</th><th style="text-align:right">Fatt.Int.</th><th style="text-align:right">Provv.</th><th style="text-align:right">Totale</th></tr></thead>'
+    +'<tbody>'+righe
+    +'<tr class="subtotale">'
+    +'<td>Totale cliente</td>'
+    +'<td class="num">'+fmtE(tot.premio)+'</td>'
+    +'<td class="num">'+fmtE(tot.lettera)+'</td>'
+    +'<td class="num">'+fmtE(tot.fattura)+'</td>'
+    +'<td class="num">'+fmtE(tot.fatturainterm)+'</td>'
+    +'<td class="num">'+fmtE(tot.provv)+'</td>'
+    +'<td class="num">'+fmtE(totGen)+'</td>'
+    +'</tr>'
+    +'</tbody></table></div></div>';
+}
+
+function renderContabilita(){
+  const annoFiltro=document.getElementById('cont-anno')?document.getElementById('cont-anno').value:'';
+  const statsEl=document.getElementById('cont-stats');
+  const tabEl=document.getElementById('cont-tabella');
+  if(!statsEl||!tabEl)return;
+
+  // Calcolo totali generali
+  let totGen={premio:0,lettera:0,fattura:0,fatturainterm:0,provv:0,clienti:0,polizze:0};
+  const righeClienti=[];
+
+  db.clienti.forEach(c=>{
+    const {polizze,tot}=calcolaContabilitaCliente(c,annoFiltro);
+    if(!polizze.length)return;
+    totGen.premio+=tot.premio;
+    totGen.lettera+=tot.lettera;
+    totGen.fattura+=tot.fattura;
+    totGen.fatturainterm+=tot.fatturainterm;
+    totGen.provv+=tot.provv;
+    totGen.clienti++;
+    totGen.polizze+=polizze.length;
+    const totC=tot.premio+tot.lettera+tot.fattura+tot.fatturainterm+tot.provv;
+    righeClienti.push(
+      '<tr>'
+      +'<td style="font-weight:500">'+c.nome+'</td>'
+      +'<td class="num">'+fmtE(tot.premio)+'</td>'
+      +'<td class="num">'+fmtE(tot.lettera)+'</td>'
+      +'<td class="num">'+fmtE(tot.fattura)+'</td>'
+      +'<td class="num">'+fmtE(tot.fatturainterm)+'</td>'
+      +'<td class="num">'+fmtE(tot.provv)+'</td>'
+      +'<td class="num" style="font-weight:500">'+fmtE(totC)+'</td>'
+      +'</tr>'
+    );
+  });
+
+  const totTot=totGen.premio+totGen.lettera+totGen.fattura+totGen.fatturainterm+totGen.provv;
+
+  // Statistiche
+  statsEl.innerHTML=
+    '<div class="cont-stat"><div class="cont-stat-label">Clienti con polizze</div><div class="cont-stat-num blu">'+totGen.clienti+'</div></div>'
+    +'<div class="cont-stat"><div class="cont-stat-label">Polizze totali</div><div class="cont-stat-num blu">'+totGen.polizze+'</div></div>'
+    +'<div class="cont-stat"><div class="cont-stat-label">Premi totali</div><div class="cont-stat-num">'+fmtE(totGen.premio)+'</div></div>'
+    +'<div class="cont-stat"><div class="cont-stat-label">Lettere</div><div class="cont-stat-num">'+fmtE(totGen.lettera)+'</div></div>'
+    +'<div class="cont-stat"><div class="cont-stat-label">Fatture</div><div class="cont-stat-num">'+fmtE(totGen.fattura)+'</div></div>'
+    +'<div class="cont-stat"><div class="cont-stat-label">Fatt. intermediario</div><div class="cont-stat-num">'+fmtE(totGen.fatturainterm)+'</div></div>'
+    +'<div class="cont-stat"><div class="cont-stat-label">Provvigioni</div><div class="cont-stat-num">'+fmtE(totGen.provv)+'</div></div>'
+    +'<div class="cont-stat" style="background:#E6F1FB;border-color:#185FA5"><div class="cont-stat-label" style="color:#185FA5">Totale generale</div><div class="cont-stat-num blu">'+fmtE(totTot)+'</div></div>';
+
+  if(!righeClienti.length){
+    tabEl.innerHTML='<div class="empty"><i class="ti ti-report-money"></i>Nessun dato per il periodo selezionato.</div>';
+    return;
+  }
+
+  tabEl.innerHTML='<div style="overflow-x:auto"><table class="cont-table">'
+    +'<thead><tr>'
+    +'<th>Cliente</th>'
+    +'<th style="text-align:right">Premi</th>'
+    +'<th style="text-align:right">Lettere</th>'
+    +'<th style="text-align:right">Fatture</th>'
+    +'<th style="text-align:right">Fatt.Int.</th>'
+    +'<th style="text-align:right">Provv.</th>'
+    +'<th style="text-align:right">Totale</th>'
+    +'</tr></thead>'
+    +'<tbody>'+righeClienti.join('')
+    +'<tr class="totale-generale">'
+    +'<td>TOTALE GENERALE'+(annoFiltro?' '+annoFiltro:'')+'</td>'
+    +'<td class="num">'+fmtE(totGen.premio)+'</td>'
+    +'<td class="num">'+fmtE(totGen.lettera)+'</td>'
+    +'<td class="num">'+fmtE(totGen.fattura)+'</td>'
+    +'<td class="num">'+fmtE(totGen.fatturainterm)+'</td>'
+    +'<td class="num">'+fmtE(totGen.provv)+'</td>'
+    +'<td class="num">'+fmtE(totTot)+'</td>'
+    +'</tr>'
+    +'</tbody></table></div>';
+}
+
+</script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script>
 (function(){
@@ -234,6 +393,25 @@ textarea{resize:vertical;height:55px}
 .perm-row{display:flex;align-items:center;justify-content:space-between;padding:.5rem .75rem;background:var(--bg2);border-radius:var(--r);gap:8px;border:0.5px solid var(--border)}
 .perm-row label{font-size:13px;cursor:pointer;flex:1;margin:0}
 
+/* ===== CONTABILITÀ ===== */
+.cont-table{width:100%;border-collapse:collapse;font-size:13px}
+.cont-table th{font-size:11px;font-weight:500;color:var(--text2);text-align:left;padding:6px 10px;border-bottom:0.5px solid var(--border);background:var(--bg2)}
+.cont-table td{padding:6px 10px;border-bottom:0.5px solid var(--border);vertical-align:top}
+.cont-table tr:last-child td{border-bottom:none}
+.cont-table tr.subtotale td{font-weight:500;background:var(--bg2);border-top:1px solid var(--border2)}
+.cont-table tr.totale-generale td{font-weight:600;font-size:14px;background:#E6F1FB;color:#185FA5;border-top:2px solid #185FA5}
+.cont-table td.num{text-align:right;font-variant-numeric:tabular-nums}
+.cont-table td.zero{color:var(--text3)}
+.cont-card{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--rl);padding:1.25rem;margin-bottom:1rem}
+.cont-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px}
+.cont-title{font-size:15px;font-weight:500}
+.cont-sub{font-size:12px;color:var(--text2);margin-top:2px}
+.cont-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:1.25rem}
+.cont-stat{background:var(--bg2);border-radius:var(--r);padding:.65rem .9rem;border:0.5px solid var(--border)}
+.cont-stat-label{font-size:11px;color:var(--text2);margin-bottom:3px}
+.cont-stat-num{font-size:18px;font-weight:500;color:var(--text)}
+.cont-stat-num.blu{color:#185FA5}
+.anno-filter{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 /* ===== SYNC INDICATOR ===== */
 .sync-indicator{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:3px 8px;border-radius:20px;font-weight:500}
 .sync-indicator.ok{background:#EAF3DE;color:#3B6D11}
@@ -312,6 +490,7 @@ textarea{resize:vertical;height:55px}
     <button class="tab" onclick="switchTab('impostazioni')"><i class="ti ti-tag"></i> Tipologie</button>
     <button class="tab" onclick="switchTab('notifiche')"><i class="ti ti-send"></i> Notifiche</button>
     <button class="tab" id="tab-btn-utenti" style="display:none" onclick="switchTab('utenti')"><i class="ti ti-lock"></i> Utenti</button>
+    <button class="tab" onclick="switchTab('contabilita')"><i class="ti ti-report-money"></i> Contabilità</button>
     <button class="tab" onclick="switchTab('ricerca')"><i class="ti ti-filter"></i> Ricerca</button>
     <button class="tab" id="tab-btn-registro" style="display:none" onclick="switchTab('registro')"><i class="ti ti-history"></i> Registro</button>
   </div>
@@ -414,6 +593,31 @@ textarea{resize:vertical;height:55px}
     </div>
   </div>
 </div>
+
+<!-- TAB CONTABILITÀ -->
+  <div id="tab-contabilita" class="panel">
+    <div class="cont-card">
+      <div class="cont-header">
+        <div>
+          <div class="cont-title"><i class="ti ti-report-money"></i> Contabilità agenzia</div>
+          <div class="cont-sub">Riepilogo premi e compensi per anno</div>
+        </div>
+        <div class="anno-filter">
+          <label style="font-size:12px;color:var(--text2)">Anno:</label>
+          <select id="cont-anno" onchange="renderContabilita()" style="width:auto;font-size:13px;padding:6px 10px">
+            <option value="">Tutti</option>
+          </select>
+          <button class="btn-sec" style="font-size:12px" onclick="window.print()"><i class="ti ti-printer"></i> Stampa</button>
+        </div>
+      </div>
+
+      <!-- Statistiche riassuntive -->
+      <div class="cont-stats" id="cont-stats"></div>
+
+      <!-- Tabella riepilogo per cliente -->
+      <div id="cont-tabella"></div>
+    </div>
+  </div>
 
 <!-- TAB RICERCA AVANZATA -->
   <div id="tab-ricerca" class="panel">
@@ -968,6 +1172,7 @@ function cardCliente(c){
         ${c.note?`<div style="grid-column:1/-1"><div class="dato-label">Note</div><div class="dato-val">${c.note}</div></div>`:''}
       </div>
       ${sezionePolizze(c)}
+      ${puo('econ')?sezioneContabileCliente(c):''}
       ${puo('doc')?sezioneDocumenti(c):''}
       <div class="cliente-footer">
         ${kdriveBtn}
@@ -1121,13 +1326,14 @@ function aggiungiTipologia(){const nome=document.getElementById('tip-nome').valu
 function eliminaTipologia(id){if(db.clienti.some(c=>c.polizze.some(p=>p.tipo===id))){alert('Tipologia in uso, impossibile eliminarla.');return;}if(!confirm('Eliminare questa tipologia?'))return;db.tipologie=db.tipologie.filter(t=>t.id!==id);save();renderTipologie();}
 
 function switchTab(t){
-  const tabs=['oggi','clienti','impostazioni','notifiche','utenti','ricerca','registro'];
+  const tabs=['oggi','clienti','impostazioni','notifiche','utenti','contabilita','ricerca','registro'];
   document.querySelectorAll('.tab').forEach((b,i)=>b.classList.toggle('active',tabs[i]===t));
   document.querySelectorAll('.panel').forEach((p,i)=>p.classList.toggle('active',tabs[i]===t));
   if(t==='clienti')renderClienti();
   if(t==='impostazioni')renderTipologie();
   if(t==='notifiche')renderNotifSettings();
   if(t==='utenti')renderUtenti();
+  if(t==='contabilita'){inizContabilita();renderContabilita();}
   if(t==='ricerca'){inizRicerca();eseguiRicerca();}
   if(t==='registro')renderLog();
 }
