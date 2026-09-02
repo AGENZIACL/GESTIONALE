@@ -878,6 +878,7 @@ textarea{resize:vertical;height:55px}
 <script>
 const SK='gcp_v3';
 let db={clienti:[],tipologie:[]};
+var logDB=[];
 let editCId=null,editPId=null,editPCli=null;
 const PALETTE=['#185FA5','#3B6D11','#A32D2D','#854F0B','#533AB7','#0F6E56','#993C1D','#72243E','#5F5E5A','#D4537E'];
 let selColor=PALETTE[0];
@@ -902,30 +903,33 @@ function setSyncBadge(stato){
 }
 
 async function load(){
-  // Carico prima da localStorage come fallback immediato
   try{const r=localStorage.getItem(SK);if(r){db=JSON.parse(r);}}catch(e){}
   if(!db||!db.clienti)db={clienti:[],tipologie:defaultTip()};
-
-  // Poi provo JSONBin
   setSyncBadge('loading');
   try{
     const res=await fetch(JBIN_URL+'/latest',{
-      headers:{'X-Master-Key':JBIN_KEY,'X-Bin-Meta':'false'}
+      method:'GET',
+      headers:{
+        'X-Master-Key':JBIN_KEY,
+        'X-Bin-Meta':'false',
+        'Content-Type':'application/json'
+      }
     });
     if(res.ok){
       const data=await res.json();
-      if(data&&data.clienti){
+      if(data&&typeof data==='object'&&data.clienti!==undefined){
         db=data;
         if(!db.clienti)db.clienti=[];
-        if(!db.tipologie)db.tipologie=defaultTip();
+        if(!db.tipologie||!db.tipologie.length)db.tipologie=defaultTip();
         localStorage.setItem(SK,JSON.stringify(db));
       }
       setSyncBadge('ok');
     } else {
+      console.warn('JSONBin risposta non ok:',res.status);
       setSyncBadge('offline');
     }
   }catch(e){
-    console.warn('JSONBin non disponibile, uso localStorage',e);
+    console.warn('JSONBin non disponibile:',e.message);
     setSyncBadge('offline');
   }
 }
@@ -1414,7 +1418,6 @@ if(loadSession()){avviaApp();}
 /* ========== REGISTRO ATTIVITÀ ========== */
 const LSK='gcp_log_v1';
 const LOG_MAX=300;
-let logDB=[];
 function salvaLog(){try{localStorage.setItem(LSK,JSON.stringify(logDB.slice(0,LOG_MAX)));}catch(e){}}
 function caricaLog(){try{const r=localStorage.getItem(LSK);if(r)logDB=JSON.parse(r);}catch(e){logDB=[];}}
 function addLog(tipo,msg){
