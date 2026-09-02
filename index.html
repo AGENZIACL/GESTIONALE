@@ -574,14 +574,47 @@ textarea{resize:vertical;height:55px}
 
     <!-- SEZIONE KDRIVE POLIZZA -->
     <div class="section-box">
-      <div class="section-box-title"><i class="ti ti-cloud" style="color:#0098FF"></i> Cartella kDrive di questa polizza</div>
-      <div class="kdrive-input-row">
-        <input id="p-kdrive" placeholder="https://kdrive.infomaniak.com/app/share/...">
-        <a id="p-kdrive-btn" href="#" target="_blank" rel="noopener" class="btn-open disabled"><i class="ti ti-external-link"></i> Apri</a>
+      <div class="section-box-title"><i class="ti ti-cloud" style="color:#0098FF"></i> Documenti kDrive — Contratto e Set Precontrattuale</div>
+
+      <!-- Contratto / Quietanza -->
+      <div style="margin-bottom:.6rem">
+        <div style="font-size:11px;font-weight:500;color:var(--text2);margin-bottom:4px"><i class="ti ti-file-invoice" style="font-size:12px"></i> Contratto / Quietanza <span style="font-weight:400;color:var(--text3)">(documento cliente)</span></div>
+        <div class="kdrive-input-row">
+          <input id="p-kdrive" placeholder="https://kdrive.infomaniak.com/app/share/..." oninput="aggiornaBtnPolizza()">
+          <a id="p-kdrive-btn" href="#" target="_blank" rel="noopener" class="btn-open disabled"><i class="ti ti-external-link"></i> Apri</a>
+        </div>
       </div>
-      <div class="kdrive-hint" style="margin-top:6px">
+
+      <!-- FI / Set -->
+      <div style="margin-bottom:.6rem">
+        <div style="font-size:11px;font-weight:500;color:var(--text2);margin-bottom:4px"><i class="ti ti-book" style="font-size:12px"></i> FI / Set <span style="font-weight:400;color:var(--text3)">(Fascicolo Informativo o Set completo — archivio agenzia)</span></div>
+        <div class="kdrive-input-row">
+          <input id="p-fi" placeholder="https://kdrive.infomaniak.com/app/share/..." oninput="aggiornaBtnFI()">
+          <a id="p-fi-btn" href="#" target="_blank" rel="noopener" class="btn-open disabled"><i class="ti ti-external-link"></i> Apri</a>
+        </div>
+      </div>
+
+      <!-- DIP -->
+      <div style="margin-bottom:.6rem">
+        <div style="font-size:11px;font-weight:500;color:var(--text2);margin-bottom:4px"><i class="ti ti-file-description" style="font-size:12px"></i> DIP <span style="font-weight:400;color:var(--text3)">(Documento Informativo Precontrattuale — archivio agenzia)</span></div>
+        <div class="kdrive-input-row">
+          <input id="p-dip" placeholder="https://kdrive.infomaniak.com/app/share/..." oninput="aggiornaBtnDIP()">
+          <a id="p-dip-btn" href="#" target="_blank" rel="noopener" class="btn-open disabled"><i class="ti ti-external-link"></i> Apri</a>
+        </div>
+      </div>
+
+      <!-- DIP Aggiuntivo -->
+      <div>
+        <div style="font-size:11px;font-weight:500;color:var(--text2);margin-bottom:4px"><i class="ti ti-file-plus" style="font-size:12px"></i> DIP Aggiuntivo <span style="font-weight:400;color:var(--text3)">(archivio agenzia)</span></div>
+        <div class="kdrive-input-row">
+          <input id="p-dipa" placeholder="https://kdrive.infomaniak.com/app/share/..." oninput="aggiornaBtnDIPA()">
+          <a id="p-dipa-btn" href="#" target="_blank" rel="noopener" class="btn-open disabled"><i class="ti ti-external-link"></i> Apri</a>
+        </div>
+      </div>
+
+      <div class="kdrive-hint" style="margin-top:8px">
         <i class="ti ti-info-circle" style="font-size:13px;flex-shrink:0;color:#0070CC"></i>
-        <span>Incolla il link della sottocartella <strong>Polizze/[Tipo polizza]</strong> su kDrive. Apri il documento della polizza direttamente da qui con un clic.</span>
+        <span>Il <strong>Contratto/Quietanza</strong> è specifico del cliente (carica nella cartella Polizze del cliente). <strong>FI/Set, DIP e DIP Aggiuntivo</strong> sono documenti di prodotto: caricali una volta in <strong>FASCICOLI_AGENZIA/[Tipologia]</strong> e riusali per tutti i clienti con la stessa polizza.</span>
       </div>
     </div>
 
@@ -674,6 +707,24 @@ function aggiornaBtnDoc(){
 function aggiornaBtnPolizza(){
   const v=document.getElementById('p-kdrive').value.trim();
   const btn=document.getElementById('p-kdrive-btn');
+  if(v&&v.startsWith('http')){btn.href=v;btn.classList.remove('disabled');}
+  else{btn.href='#';btn.classList.add('disabled');}
+}
+function aggiornaBtnFI(){
+  const v=document.getElementById('p-fi').value.trim();
+  const btn=document.getElementById('p-fi-btn');
+  if(v&&v.startsWith('http')){btn.href=v;btn.classList.remove('disabled');}
+  else{btn.href='#';btn.classList.add('disabled');}
+}
+function aggiornaBtnDIP(){
+  const v=document.getElementById('p-dip').value.trim();
+  const btn=document.getElementById('p-dip-btn');
+  if(v&&v.startsWith('http')){btn.href=v;btn.classList.remove('disabled');}
+  else{btn.href='#';btn.classList.add('disabled');}
+}
+function aggiornaBtnDIPA(){
+  const v=document.getElementById('p-dipa').value.trim();
+  const btn=document.getElementById('p-dipa-btn');
   if(v&&v.startsWith('http')){btn.href=v;btn.classList.remove('disabled');}
   else{btn.href='#';btn.classList.add('disabled');}
 }
@@ -828,7 +879,10 @@ function rigaPolizza(c,p){
   const prTags=isAttiva?tuttiPromo(p).map(pr=>`<span class="promo-tag ${pr.cls}" title="${pr.campo}: ${fmtD(pr.data)}">${pr.campo} ${pr.cls==='att'?'⚠ '+pr.label:pr.cls==='ogg'?'📞 oggi':pr.label}</span>`).join(''):'';
   const econVoci=[];
   if(puo('econ')){if(p.fattura)econVoci.push(`Fattura: ${fmtE(p.fatturaImp)}`);if(p.lettera)econVoci.push(`Lettera: ${fmtE(p.letteraImp)}`);if(p.fatturainterm)econVoci.push(`Fatt. interm.: ${fmtE(p.fatturaIntermImp)}`);if(p.provv)econVoci.push(`Provvigioni: ${fmtE(p.provvImp)}`);}
-  const kdrivePolizza=p.kdrive?`<a href="${p.kdrive}" target="_blank" rel="noopener" class="kdrive-link"><i class="ti ti-cloud"></i> kDrive</a>`:'';
+  const kdrivePolizza=p.kdrive?`<a href="${p.kdrive}" target="_blank" rel="noopener" class="kdrive-link" title="Contratto/Quietanza"><i class="ti ti-file-invoice"></i> Contratto</a>`:'';
+  const fiLink=p.fi?`<a href="${p.fi}" target="_blank" rel="noopener" class="kdrive-link" title="FI / Set" style="border-color:#533AB7;color:#533AB7"><i class="ti ti-book"></i> FI/Set</a>`:'';
+  const dipLink=p.dip?`<a href="${p.dip}" target="_blank" rel="noopener" class="kdrive-link" title="DIP" style="border-color:#533AB7;color:#533AB7"><i class="ti ti-file-description"></i> DIP</a>`:'';
+  const dipaLink=p.dipa?`<a href="${p.dipa}" target="_blank" rel="noopener" class="kdrive-link" title="DIP Aggiuntivo" style="border-color:#533AB7;color:#533AB7"><i class="ti ti-file-plus"></i> DIP Agg.</a>`:'';
   return`<div class="${rowCls}">
     <div style="width:8px;height:8px;border-radius:50%;background:${tip.colore};flex-shrink:0;margin-top:5px"></div>
     <div class="polizza-info">
@@ -849,7 +903,7 @@ function rigaPolizza(c,p){
       ${p.note?`<div style="font-size:11px;color:var(--text3);font-style:italic;margin-top:3px">${p.note}</div>`:''}
     </div>
     <div class="polizza-actions">
-      ${kdrivePolizza}
+      ${kdrivePolizza}${fiLink}${dipLink}${dipaLink}
       ${puo('modifica')?`<button onclick="apriModalPolizza('${c.id}','${p.id}')"><i class="ti ti-edit"></i> Modifica</button>`:''}
       ${puo('modifica')?`<button onclick="eliminaPolizza('${c.id}','${p.id}')" style="color:#A32D2D"><i class="ti ti-trash"></i></button>`:''}
     </div>
@@ -890,7 +944,7 @@ function apriModalPolizza(cid,pid){
   sel.innerHTML='<option value="">Seleziona...</option>'+db.tipologie.map(t=>`<option value="${t.id}">${t.nome}</option>`).join('');
   document.getElementById('p-msg').textContent='';
   ['fattura','lettera','fatturainterm','provv'].forEach(k=>{document.getElementById('p-'+k+'-chk').checked=false;document.getElementById('div-'+k).classList.remove('vis');document.getElementById('p-'+k+'-imp').value='';});
-  const campiBase=['num','dec','scad','p1','p2','p3','premio','comp','interm','note','kdrive'];
+  const campiBase=['num','dec','scad','p1','p2','p3','premio','comp','interm','note','kdrive','fi','dip','dipa'];
   if(pid){
     const c=db.clienti.find(x=>x.id===cid);const p=c&&c.polizze.find(x=>x.id===pid);
     if(p){
@@ -904,7 +958,7 @@ function apriModalPolizza(cid,pid){
     document.getElementById('p-tipo').value='';document.getElementById('p-contratto').value='nuovo';document.getElementById('p-stato').value='viva';
     campiBase.forEach(f=>document.getElementById('p-'+f).value='');
   }
-  aggiornaBtnPolizza();
+  aggiornaBtnPolizza();aggiornaBtnFI();aggiornaBtnDIP();aggiornaBtnDIPA();
   document.getElementById('modal-polizza').style.display='flex';
 }
 
@@ -914,7 +968,7 @@ function salvaPolizza(){
   const tipo=document.getElementById('p-tipo').value;const scad=document.getElementById('p-scad').value;const msg=document.getElementById('p-msg');
   if(!tipo||!scad){msg.className='form-msg err';msg.textContent='Tipologia e scadenza sono obbligatorie.';return;}
   const fatChk=document.getElementById('p-fattura-chk').checked;const letChk=document.getElementById('p-lettera-chk').checked;const fiChk=document.getElementById('p-fatturainterm-chk').checked;const prChk=document.getElementById('p-provv-chk').checked;
-  const obj={tipo,scad,num:document.getElementById('p-num').value.trim(),contratto:document.getElementById('p-contratto').value,stato:document.getElementById('p-stato').value,dec:document.getElementById('p-dec').value,p1:document.getElementById('p-p1').value,p2:document.getElementById('p-p2').value,p3:document.getElementById('p-p3').value,premio:document.getElementById('p-premio').value,comp:document.getElementById('p-comp').value.trim(),interm:document.getElementById('p-interm').value.trim(),note:document.getElementById('p-note').value.trim(),kdrive:document.getElementById('p-kdrive').value.trim(),fattura:fatChk,fatturaImp:fatChk?document.getElementById('p-fattura-imp').value:'',lettera:letChk,letteraImp:letChk?document.getElementById('p-lettera-imp').value:'',fatturainterm:fiChk,fatturaIntermImp:fiChk?document.getElementById('p-fatturainterm-imp').value:'',provv:prChk,provvImp:prChk?document.getElementById('p-provv-imp').value:''};
+  const obj={tipo,scad,num:document.getElementById('p-num').value.trim(),contratto:document.getElementById('p-contratto').value,stato:document.getElementById('p-stato').value,dec:document.getElementById('p-dec').value,p1:document.getElementById('p-p1').value,p2:document.getElementById('p-p2').value,p3:document.getElementById('p-p3').value,premio:document.getElementById('p-premio').value,comp:document.getElementById('p-comp').value.trim(),interm:document.getElementById('p-interm').value.trim(),note:document.getElementById('p-note').value.trim(),kdrive:document.getElementById('p-kdrive').value.trim(),fi:document.getElementById('p-fi').value.trim(),dip:document.getElementById('p-dip').value.trim(),dipa:document.getElementById('p-dipa').value.trim(),fattura:fatChk,fatturaImp:fatChk?document.getElementById('p-fattura-imp').value:'',lettera:letChk,letteraImp:letChk?document.getElementById('p-lettera-imp').value:'',fatturainterm:fiChk,fatturaIntermImp:fiChk?document.getElementById('p-fatturainterm-imp').value:'',provv:prChk,provvImp:prChk?document.getElementById('p-provv-imp').value:''};
   const c=db.clienti.find(x=>x.id===editPCli);if(!c)return;
   if(editPId){const idx=c.polizze.findIndex(x=>x.id===editPId);if(idx>=0)c.polizze[idx]={...c.polizze[idx],...obj};}
   else c.polizze.push({id:'p'+Date.now(),...obj});
