@@ -5,165 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gestione Clienti & Polizze</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
-<script>
 
-/* ========== CONTABILITÀ ========== */
-function anniDisponibili(){
-  const anni=new Set();
-  db.clienti.forEach(c=>c.polizze.forEach(p=>{
-    if(p.scad){const a=p.scad.substring(0,4);if(a)anni.add(a);}
-    if(p.dec){const a=p.dec.substring(0,4);if(a)anni.add(a);}
-  }));
-  return Array.from(anni).sort().reverse();
-}
-
-function inizContabilita(){
-  const sel=document.getElementById('cont-anno');if(!sel)return;
-  const cur=sel.value;
-  const anni=anniDisponibili();
-  sel.innerHTML='<option value="">Tutti gli anni</option>'+anni.map(a=>'<option value="'+a+'">'+a+'</option>').join('');
-  if(cur)sel.value=cur;
-}
-
-function calcolaContabilitaCliente(c, annoFiltro){
-  const polizze=c.polizze.filter(p=>{
-    if(p.stato==='annullata')return false;
-    if(annoFiltro){
-      const anno=p.scad?p.scad.substring(0,4):p.dec?p.dec.substring(0,4):'';
-      if(anno!==annoFiltro)return false;
-    }
-    return true;
-  });
-  let tot={premio:0,lettera:0,fattura:0,fatturainterm:0,provv:0};
-  polizze.forEach(p=>{
-    tot.premio+=parseFloat(p.premio)||0;
-    if(p.lettera)tot.lettera+=parseFloat(p.letteraImp)||0;
-    if(p.fattura)tot.fattura+=parseFloat(p.fatturaImp)||0;
-    if(p.fatturainterm)tot.fatturainterm+=parseFloat(p.fatturaIntermImp)||0;
-    if(p.provv)tot.provv+=parseFloat(p.provvImp)||0;
-  });
-  return{polizze,tot};
-}
-
-function sezioneContabileCliente(c){
-  const annoFiltro='';
-  const {polizze,tot}=calcolaContabilitaCliente(c,annoFiltro);
-  if(!polizze.length)return'';
-  const totComp=tot.lettera+tot.fattura+tot.fatturainterm+tot.provv;
-  const totGen=tot.premio+totComp;
-
-  let righe=polizze.map(p=>{
-    const tip=tipById(p.tipo);
-    const pr=parseFloat(p.premio)||0;
-    const let_=p.lettera?(parseFloat(p.letteraImp)||0):0;
-    const fat=p.fattura?(parseFloat(p.fatturaImp)||0):0;
-    const fi=p.fatturainterm?(parseFloat(p.fatturaIntermImp)||0):0;
-    const pv=p.provv?(parseFloat(p.provvImp)||0):0;
-    const totP=pr+let_+fat+fi+pv;
-    return '<tr>'
-      +'<td>'+tip.nome+(p.num?' <span style="font-size:10px;color:var(--text3)">'+p.num+'</span>':'')+'</td>'
-      +'<td class="num">'+(pr?fmtE(pr):'<span class="zero">—</span>')+'</td>'
-      +'<td class="num">'+(let_?fmtE(let_):'<span class="zero">—</span>')+'</td>'
-      +'<td class="num">'+(fat?fmtE(fat):'<span class="zero">—</span>')+'</td>'
-      +'<td class="num">'+(fi?fmtE(fi):'<span class="zero">—</span>')+'</td>'
-      +'<td class="num">'+(pv?fmtE(pv):'<span class="zero">—</span>')+'</td>'
-      +'<td class="num" style="font-weight:500">'+fmtE(totP)+'</td>'
-      +'</tr>';
-  }).join('');
-
-  return '<div style="margin-top:.75rem;padding-top:.75rem;border-top:0.5px solid var(--border)">'
-    +'<div style="font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px"><i class="ti ti-report-money"></i> Riepilogo contabile</div>'
-    +'<div style="overflow-x:auto">'
-    +'<table class="cont-table">'
-    +'<thead><tr><th>Polizza</th><th style="text-align:right">Premio</th><th style="text-align:right">Lettera</th><th style="text-align:right">Fattura</th><th style="text-align:right">Fatt.Int.</th><th style="text-align:right">Provv.</th><th style="text-align:right">Totale</th></tr></thead>'
-    +'<tbody>'+righe
-    +'<tr class="subtotale">'
-    +'<td>Totale cliente</td>'
-    +'<td class="num">'+fmtE(tot.premio)+'</td>'
-    +'<td class="num">'+fmtE(tot.lettera)+'</td>'
-    +'<td class="num">'+fmtE(tot.fattura)+'</td>'
-    +'<td class="num">'+fmtE(tot.fatturainterm)+'</td>'
-    +'<td class="num">'+fmtE(tot.provv)+'</td>'
-    +'<td class="num">'+fmtE(totGen)+'</td>'
-    +'</tr>'
-    +'</tbody></table></div></div>';
-}
-
-function renderContabilita(){
-  const annoFiltro=document.getElementById('cont-anno')?document.getElementById('cont-anno').value:'';
-  const statsEl=document.getElementById('cont-stats');
-  const tabEl=document.getElementById('cont-tabella');
-  if(!statsEl||!tabEl)return;
-
-  // Calcolo totali generali
-  let totGen={premio:0,lettera:0,fattura:0,fatturainterm:0,provv:0,clienti:0,polizze:0};
-  const righeClienti=[];
-
-  db.clienti.forEach(c=>{
-    const {polizze,tot}=calcolaContabilitaCliente(c,annoFiltro);
-    if(!polizze.length)return;
-    totGen.premio+=tot.premio;
-    totGen.lettera+=tot.lettera;
-    totGen.fattura+=tot.fattura;
-    totGen.fatturainterm+=tot.fatturainterm;
-    totGen.provv+=tot.provv;
-    totGen.clienti++;
-    totGen.polizze+=polizze.length;
-    const totC=tot.premio+tot.lettera+tot.fattura+tot.fatturainterm+tot.provv;
-    righeClienti.push(
-      '<tr>'
-      +'<td style="font-weight:500">'+c.nome+'</td>'
-      +'<td class="num">'+fmtE(tot.premio)+'</td>'
-      +'<td class="num">'+fmtE(tot.lettera)+'</td>'
-      +'<td class="num">'+fmtE(tot.fattura)+'</td>'
-      +'<td class="num">'+fmtE(tot.fatturainterm)+'</td>'
-      +'<td class="num">'+fmtE(tot.provv)+'</td>'
-      +'<td class="num" style="font-weight:500">'+fmtE(totC)+'</td>'
-      +'</tr>'
-    );
-  });
-
-  const totTot=totGen.premio+totGen.lettera+totGen.fattura+totGen.fatturainterm+totGen.provv;
-
-  // Statistiche
-  statsEl.innerHTML=
-    '<div class="cont-stat"><div class="cont-stat-label">Clienti con polizze</div><div class="cont-stat-num blu">'+totGen.clienti+'</div></div>'
-    +'<div class="cont-stat"><div class="cont-stat-label">Polizze totali</div><div class="cont-stat-num blu">'+totGen.polizze+'</div></div>'
-    +'<div class="cont-stat"><div class="cont-stat-label">Premi totali</div><div class="cont-stat-num">'+fmtE(totGen.premio)+'</div></div>'
-    +'<div class="cont-stat"><div class="cont-stat-label">Lettere</div><div class="cont-stat-num">'+fmtE(totGen.lettera)+'</div></div>'
-    +'<div class="cont-stat"><div class="cont-stat-label">Fatture</div><div class="cont-stat-num">'+fmtE(totGen.fattura)+'</div></div>'
-    +'<div class="cont-stat"><div class="cont-stat-label">Fatt. intermediario</div><div class="cont-stat-num">'+fmtE(totGen.fatturainterm)+'</div></div>'
-    +'<div class="cont-stat"><div class="cont-stat-label">Provvigioni</div><div class="cont-stat-num">'+fmtE(totGen.provv)+'</div></div>'
-    +'<div class="cont-stat" style="background:#E6F1FB;border-color:#185FA5"><div class="cont-stat-label" style="color:#185FA5">Totale generale</div><div class="cont-stat-num blu">'+fmtE(totTot)+'</div></div>';
-
-  if(!righeClienti.length){
-    tabEl.innerHTML='<div class="empty"><i class="ti ti-report-money"></i>Nessun dato per il periodo selezionato.</div>';
-    return;
-  }
-
-  tabEl.innerHTML='<div style="overflow-x:auto"><table class="cont-table">'
-    +'<thead><tr>'
-    +'<th>Cliente</th>'
-    +'<th style="text-align:right">Premi</th>'
-    +'<th style="text-align:right">Lettere</th>'
-    +'<th style="text-align:right">Fatture</th>'
-    +'<th style="text-align:right">Fatt.Int.</th>'
-    +'<th style="text-align:right">Provv.</th>'
-    +'<th style="text-align:right">Totale</th>'
-    +'</tr></thead>'
-    +'<tbody>'+righeClienti.join('')
-    +'<tr class="totale-generale">'
-    +'<td>TOTALE GENERALE'+(annoFiltro?' '+annoFiltro:'')+'</td>'
-    +'<td class="num">'+fmtE(totGen.premio)+'</td>'
-    +'<td class="num">'+fmtE(totGen.lettera)+'</td>'
-    +'<td class="num">'+fmtE(totGen.fattura)+'</td>'
-    +'<td class="num">'+fmtE(totGen.fatturainterm)+'</td>'
-    +'<td class="num">'+fmtE(totGen.provv)+'</td>'
-    +'<td class="num">'+fmtE(totTot)+'</td>'
-    +'</tr>'
-    +'</tbody></table></div>';
-}
-</script>
 
 
 <style>
@@ -913,8 +755,7 @@ async function load(){
       method:'GET',
       headers:{
         'X-Master-Key':JBIN_KEY,
-        'X-Bin-Meta':'false',
-        'Content-Type':'application/json'
+        'X-Bin-Meta':'false'
       }
     });
     if(res.ok){
@@ -1418,8 +1259,8 @@ if(loadSession()){avviaApp();}
 
 
 /* ========== REGISTRO ATTIVITÀ ========== */
-const LSK='gcp_log_v1';
-const LOG_MAX=300;
+var LSK='gcp_log_v1';
+var LOG_MAX=300;
 function salvaLog(){try{localStorage.setItem(LSK,JSON.stringify(logDB.slice(0,LOG_MAX)));}catch(e){}}
 function caricaLog(){try{const r=localStorage.getItem(LSK);if(r)logDB=JSON.parse(r);}catch(e){logDB=[];}}
 function addLog(tipo,msg){
@@ -1506,6 +1347,166 @@ function stampaCliente(cid){
   setTimeout(()=>{document.querySelectorAll('.cliente-body').forEach(bd=>{bd.classList.toggle('open',!!bd._wasOpen);});},500);
 }
 
+
+<script>
+
+/* ========== CONTABILITÀ ========== */
+function anniDisponibili(){
+  const anni=new Set();
+  db.clienti.forEach(c=>c.polizze.forEach(p=>{
+    if(p.scad){const a=p.scad.substring(0,4);if(a)anni.add(a);}
+    if(p.dec){const a=p.dec.substring(0,4);if(a)anni.add(a);}
+  }));
+  return Array.from(anni).sort().reverse();
+}
+
+function inizContabilita(){
+  const sel=document.getElementById('cont-anno');if(!sel)return;
+  const cur=sel.value;
+  const anni=anniDisponibili();
+  sel.innerHTML='<option value="">Tutti gli anni</option>'+anni.map(a=>'<option value="'+a+'">'+a+'</option>').join('');
+  if(cur)sel.value=cur;
+}
+
+function calcolaContabilitaCliente(c, annoFiltro){
+  const polizze=c.polizze.filter(p=>{
+    if(p.stato==='annullata')return false;
+    if(annoFiltro){
+      const anno=p.scad?p.scad.substring(0,4):p.dec?p.dec.substring(0,4):'';
+      if(anno!==annoFiltro)return false;
+    }
+    return true;
+  });
+  let tot={premio:0,lettera:0,fattura:0,fatturainterm:0,provv:0};
+  polizze.forEach(p=>{
+    tot.premio+=parseFloat(p.premio)||0;
+    if(p.lettera)tot.lettera+=parseFloat(p.letteraImp)||0;
+    if(p.fattura)tot.fattura+=parseFloat(p.fatturaImp)||0;
+    if(p.fatturainterm)tot.fatturainterm+=parseFloat(p.fatturaIntermImp)||0;
+    if(p.provv)tot.provv+=parseFloat(p.provvImp)||0;
+  });
+  return{polizze,tot};
+}
+
+function sezioneContabileCliente(c){
+  const annoFiltro='';
+  const {polizze,tot}=calcolaContabilitaCliente(c,annoFiltro);
+  if(!polizze.length)return'';
+  const totComp=tot.lettera+tot.fattura+tot.fatturainterm+tot.provv;
+  const totGen=tot.premio+totComp;
+
+  let righe=polizze.map(p=>{
+    const tip=tipById(p.tipo);
+    const pr=parseFloat(p.premio)||0;
+    const let_=p.lettera?(parseFloat(p.letteraImp)||0):0;
+    const fat=p.fattura?(parseFloat(p.fatturaImp)||0):0;
+    const fi=p.fatturainterm?(parseFloat(p.fatturaIntermImp)||0):0;
+    const pv=p.provv?(parseFloat(p.provvImp)||0):0;
+    const totP=pr+let_+fat+fi+pv;
+    return '<tr>'
+      +'<td>'+tip.nome+(p.num?' <span style="font-size:10px;color:var(--text3)">'+p.num+'</span>':'')+'</td>'
+      +'<td class="num">'+(pr?fmtE(pr):'<span class="zero">—</span>')+'</td>'
+      +'<td class="num">'+(let_?fmtE(let_):'<span class="zero">—</span>')+'</td>'
+      +'<td class="num">'+(fat?fmtE(fat):'<span class="zero">—</span>')+'</td>'
+      +'<td class="num">'+(fi?fmtE(fi):'<span class="zero">—</span>')+'</td>'
+      +'<td class="num">'+(pv?fmtE(pv):'<span class="zero">—</span>')+'</td>'
+      +'<td class="num" style="font-weight:500">'+fmtE(totP)+'</td>'
+      +'</tr>';
+  }).join('');
+
+  return '<div style="margin-top:.75rem;padding-top:.75rem;border-top:0.5px solid var(--border)">'
+    +'<div style="font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px"><i class="ti ti-report-money"></i> Riepilogo contabile</div>'
+    +'<div style="overflow-x:auto">'
+    +'<table class="cont-table">'
+    +'<thead><tr><th>Polizza</th><th style="text-align:right">Premio</th><th style="text-align:right">Lettera</th><th style="text-align:right">Fattura</th><th style="text-align:right">Fatt.Int.</th><th style="text-align:right">Provv.</th><th style="text-align:right">Totale</th></tr></thead>'
+    +'<tbody>'+righe
+    +'<tr class="subtotale">'
+    +'<td>Totale cliente</td>'
+    +'<td class="num">'+fmtE(tot.premio)+'</td>'
+    +'<td class="num">'+fmtE(tot.lettera)+'</td>'
+    +'<td class="num">'+fmtE(tot.fattura)+'</td>'
+    +'<td class="num">'+fmtE(tot.fatturainterm)+'</td>'
+    +'<td class="num">'+fmtE(tot.provv)+'</td>'
+    +'<td class="num">'+fmtE(totGen)+'</td>'
+    +'</tr>'
+    +'</tbody></table></div></div>';
+}
+
+function renderContabilita(){
+  const annoFiltro=document.getElementById('cont-anno')?document.getElementById('cont-anno').value:'';
+  const statsEl=document.getElementById('cont-stats');
+  const tabEl=document.getElementById('cont-tabella');
+  if(!statsEl||!tabEl)return;
+
+  // Calcolo totali generali
+  let totGen={premio:0,lettera:0,fattura:0,fatturainterm:0,provv:0,clienti:0,polizze:0};
+  const righeClienti=[];
+
+  db.clienti.forEach(c=>{
+    const {polizze,tot}=calcolaContabilitaCliente(c,annoFiltro);
+    if(!polizze.length)return;
+    totGen.premio+=tot.premio;
+    totGen.lettera+=tot.lettera;
+    totGen.fattura+=tot.fattura;
+    totGen.fatturainterm+=tot.fatturainterm;
+    totGen.provv+=tot.provv;
+    totGen.clienti++;
+    totGen.polizze+=polizze.length;
+    const totC=tot.premio+tot.lettera+tot.fattura+tot.fatturainterm+tot.provv;
+    righeClienti.push(
+      '<tr>'
+      +'<td style="font-weight:500">'+c.nome+'</td>'
+      +'<td class="num">'+fmtE(tot.premio)+'</td>'
+      +'<td class="num">'+fmtE(tot.lettera)+'</td>'
+      +'<td class="num">'+fmtE(tot.fattura)+'</td>'
+      +'<td class="num">'+fmtE(tot.fatturainterm)+'</td>'
+      +'<td class="num">'+fmtE(tot.provv)+'</td>'
+      +'<td class="num" style="font-weight:500">'+fmtE(totC)+'</td>'
+      +'</tr>'
+    );
+  });
+
+  const totTot=totGen.premio+totGen.lettera+totGen.fattura+totGen.fatturainterm+totGen.provv;
+
+  // Statistiche
+  statsEl.innerHTML=
+    '<div class="cont-stat"><div class="cont-stat-label">Clienti con polizze</div><div class="cont-stat-num blu">'+totGen.clienti+'</div></div>'
+    +'<div class="cont-stat"><div class="cont-stat-label">Polizze totali</div><div class="cont-stat-num blu">'+totGen.polizze+'</div></div>'
+    +'<div class="cont-stat"><div class="cont-stat-label">Premi totali</div><div class="cont-stat-num">'+fmtE(totGen.premio)+'</div></div>'
+    +'<div class="cont-stat"><div class="cont-stat-label">Lettere</div><div class="cont-stat-num">'+fmtE(totGen.lettera)+'</div></div>'
+    +'<div class="cont-stat"><div class="cont-stat-label">Fatture</div><div class="cont-stat-num">'+fmtE(totGen.fattura)+'</div></div>'
+    +'<div class="cont-stat"><div class="cont-stat-label">Fatt. intermediario</div><div class="cont-stat-num">'+fmtE(totGen.fatturainterm)+'</div></div>'
+    +'<div class="cont-stat"><div class="cont-stat-label">Provvigioni</div><div class="cont-stat-num">'+fmtE(totGen.provv)+'</div></div>'
+    +'<div class="cont-stat" style="background:#E6F1FB;border-color:#185FA5"><div class="cont-stat-label" style="color:#185FA5">Totale generale</div><div class="cont-stat-num blu">'+fmtE(totTot)+'</div></div>';
+
+  if(!righeClienti.length){
+    tabEl.innerHTML='<div class="empty"><i class="ti ti-report-money"></i>Nessun dato per il periodo selezionato.</div>';
+    return;
+  }
+
+  tabEl.innerHTML='<div style="overflow-x:auto"><table class="cont-table">'
+    +'<thead><tr>'
+    +'<th>Cliente</th>'
+    +'<th style="text-align:right">Premi</th>'
+    +'<th style="text-align:right">Lettere</th>'
+    +'<th style="text-align:right">Fatture</th>'
+    +'<th style="text-align:right">Fatt.Int.</th>'
+    +'<th style="text-align:right">Provv.</th>'
+    +'<th style="text-align:right">Totale</th>'
+    +'</tr></thead>'
+    +'<tbody>'+righeClienti.join('')
+    +'<tr class="totale-generale">'
+    +'<td>TOTALE GENERALE'+(annoFiltro?' '+annoFiltro:'')+'</td>'
+    +'<td class="num">'+fmtE(totGen.premio)+'</td>'
+    +'<td class="num">'+fmtE(totGen.lettera)+'</td>'
+    +'<td class="num">'+fmtE(totGen.fattura)+'</td>'
+    +'<td class="num">'+fmtE(totGen.fatturainterm)+'</td>'
+    +'<td class="num">'+fmtE(totGen.provv)+'</td>'
+    +'<td class="num">'+fmtE(totTot)+'</td>'
+    +'</tr>'
+    +'</tbody></table></div>';
+}
+</script>
 </script>
 </body>
 </html>
