@@ -622,6 +622,7 @@ textarea{resize:vertical;height:55px}
       <div class="form-group"><label>Decorrenza</label><input type="date" id="p-dec"></div>
       <div class="form-group"><label>Scadenza *</label><input type="date" id="p-scad" oninput="sugPromo()"></div>
       <div class="form-group"><label>Premio annuo (€)</label><input type="number" id="p-premio" placeholder="0.00" min="0" step="0.01"></div>
+      <div class="form-group"><label>Quota associativa (€)</label><input type="number" id="p-quota" placeholder="0.00" min="0" step="0.01"></div>
       <div class="form-group"><label>Compagnia</label><input id="p-comp" placeholder="es. Generali, AXA, Unipol..."></div>
       <div class="form-group"><label>Intermediario</label><input id="p-interm" placeholder="es. Broker, agente sub..."></div>
       <div class="form-group form-full"><label>Note polizza</label><textarea id="p-note" placeholder="Condizioni particolari, massimali, franchigie..."></textarea></div>
@@ -1027,6 +1028,7 @@ function rigaPolizza(c,p){
         ${p.comp?`<span><i class="ti ti-building" style="font-size:11px"></i> ${p.comp}</span>`:''}
         ${p.interm?`<span><i class="ti ti-user-check" style="font-size:11px"></i> ${p.interm}</span>`:''}
         ${(p.premio&&puo('econ'))?`<span><i class="ti ti-coin-euro" style="font-size:11px"></i> ${parseFloat(p.premio).toLocaleString('it-IT')}/a</span>`:''}
+        ${(p.quota&&puo('econ'))?`<span><i class="ti ti-users" style="font-size:11px"></i> quota ${parseFloat(p.quota).toLocaleString('it-IT')}</span>`:''}
       </div>
       ${econVoci.length?`<div class="polizza-econ">${econVoci.map(v=>`<span style="font-size:11px;color:var(--text2)">${v}</span>`).join('')}</div>`:''}
       ${prTags?`<div class="promo-tags">${prTags}</div>`:''}
@@ -1074,7 +1076,7 @@ function apriModalPolizza(cid,pid){
   sel.innerHTML='<option value="">Seleziona...</option>'+db.tipologie.map(t=>`<option value="${t.id}">${t.nome}</option>`).join('');
   document.getElementById('p-msg').textContent='';
   ['fattura','lettera','fatturainterm','provv'].forEach(k=>{document.getElementById('p-'+k+'-chk').checked=false;document.getElementById('div-'+k).classList.remove('vis');document.getElementById('p-'+k+'-imp').value='';});
-  const campiBase=['num','dec','scad','p1','p2','p3','premio','comp','interm','note','kdrive','fi','dip','dipa'];
+  const campiBase=['num','dec','scad','p1','p2','p3','premio','quota','comp','interm','note','kdrive','fi','dip','dipa'];
   if(pid){
     const c=db.clienti.find(x=>x.id===cid);const p=c&&c.polizze.find(x=>x.id===pid);
     if(p){
@@ -1098,7 +1100,7 @@ function salvaPolizza(){
   const tipo=document.getElementById('p-tipo').value;const scad=document.getElementById('p-scad').value;const msg=document.getElementById('p-msg');
   if(!tipo||!scad){msg.className='form-msg err';msg.textContent='Tipologia e scadenza sono obbligatorie.';return;}
   const fatChk=document.getElementById('p-fattura-chk').checked;const letChk=document.getElementById('p-lettera-chk').checked;const fiChk=document.getElementById('p-fatturainterm-chk').checked;const prChk=document.getElementById('p-provv-chk').checked;
-  const obj={tipo,scad,num:document.getElementById('p-num').value.trim(),contratto:document.getElementById('p-contratto').value,stato:document.getElementById('p-stato').value,dec:document.getElementById('p-dec').value,p1:document.getElementById('p-p1').value,p2:document.getElementById('p-p2').value,p3:document.getElementById('p-p3').value,premio:document.getElementById('p-premio').value,comp:document.getElementById('p-comp').value.trim(),interm:document.getElementById('p-interm').value.trim(),note:document.getElementById('p-note').value.trim(),kdrive:document.getElementById('p-kdrive').value.trim(),fi:document.getElementById('p-fi').value.trim(),dip:document.getElementById('p-dip').value.trim(),dipa:document.getElementById('p-dipa').value.trim(),fattura:fatChk,fatturaImp:fatChk?document.getElementById('p-fattura-imp').value:'',lettera:letChk,letteraImp:letChk?document.getElementById('p-lettera-imp').value:'',fatturainterm:fiChk,fatturaIntermImp:fiChk?document.getElementById('p-fatturainterm-imp').value:'',provv:prChk,provvImp:prChk?document.getElementById('p-provv-imp').value:''};
+  const obj={tipo,scad,num:document.getElementById('p-num').value.trim(),contratto:document.getElementById('p-contratto').value,stato:document.getElementById('p-stato').value,dec:document.getElementById('p-dec').value,p1:document.getElementById('p-p1').value,p2:document.getElementById('p-p2').value,p3:document.getElementById('p-p3').value,premio:document.getElementById('p-premio').value,comp:document.getElementById('p-comp').value.trim(),interm:document.getElementById('p-interm').value.trim(),note:document.getElementById('p-note').value.trim(),quota:document.getElementById('p-quota').value,kdrive:document.getElementById('p-kdrive').value.trim(),fi:document.getElementById('p-fi').value.trim(),dip:document.getElementById('p-dip').value.trim(),dipa:document.getElementById('p-dipa').value.trim(),fattura:fatChk,fatturaImp:fatChk?document.getElementById('p-fattura-imp').value:'',lettera:letChk,letteraImp:letChk?document.getElementById('p-lettera-imp').value:'',fatturainterm:fiChk,fatturaIntermImp:fiChk?document.getElementById('p-fatturainterm-imp').value:'',provv:prChk,provvImp:prChk?document.getElementById('p-provv-imp').value:''};
   const c=db.clienti.find(x=>x.id===editPCli);if(!c)return;
   if(editPId){const idx=c.polizze.findIndex(x=>x.id===editPId);if(idx>=0)c.polizze[idx]={...c.polizze[idx],...obj};}
   else c.polizze.push({id:'p'+Date.now(),...obj});
@@ -1375,9 +1377,10 @@ function calcolaContabilitaCliente(c, annoFiltro){
     }
     return true;
   });
-  let tot={premio:0,lettera:0,fattura:0,fatturainterm:0,provv:0};
+  let tot={premio:0,quota:0,lettera:0,fattura:0,fatturainterm:0,provv:0};
   polizze.forEach(p=>{
     tot.premio+=parseFloat(p.premio)||0;
+    tot.quota+=parseFloat(p.quota)||0;
     if(p.lettera)tot.lettera+=parseFloat(p.letteraImp)||0;
     if(p.fattura)tot.fattura+=parseFloat(p.fatturaImp)||0;
     if(p.fatturainterm)tot.fatturainterm+=parseFloat(p.fatturaIntermImp)||0;
@@ -1396,14 +1399,16 @@ function sezioneContabileCliente(c){
   let righe=polizze.map(p=>{
     const tip=tipById(p.tipo);
     const pr=parseFloat(p.premio)||0;
+    const qt=parseFloat(p.quota)||0;
     const let_=p.lettera?(parseFloat(p.letteraImp)||0):0;
     const fat=p.fattura?(parseFloat(p.fatturaImp)||0):0;
     const fi=p.fatturainterm?(parseFloat(p.fatturaIntermImp)||0):0;
     const pv=p.provv?(parseFloat(p.provvImp)||0):0;
-    const totP=pr+let_+fat+fi+pv;
+    const totP=pr+qt+let_+fat+fi+pv;
     return '<tr>'
       +'<td>'+tip.nome+(p.num?' <span style="font-size:10px;color:var(--text3)">'+p.num+'</span>':'')+'</td>'
       +'<td class="num">'+(pr?fmtE(pr):'<span class="zero">—</span>')+'</td>'
+      +'<td class="num">'+(qt?fmtE(qt):'<span class="zero">—</span>')+'</td>'
       +'<td class="num">'+(let_?fmtE(let_):'<span class="zero">—</span>')+'</td>'
       +'<td class="num">'+(fat?fmtE(fat):'<span class="zero">—</span>')+'</td>'
       +'<td class="num">'+(fi?fmtE(fi):'<span class="zero">—</span>')+'</td>'
@@ -1416,11 +1421,12 @@ function sezioneContabileCliente(c){
     +'<div style="font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px"><i class="ti ti-report-money"></i> Riepilogo contabile</div>'
     +'<div style="overflow-x:auto">'
     +'<table class="cont-table">'
-    +'<thead><tr><th>Polizza</th><th style="text-align:right">Premio</th><th style="text-align:right">Lettera</th><th style="text-align:right">Fattura</th><th style="text-align:right">Fatt.Int.</th><th style="text-align:right">Provv.</th><th style="text-align:right">Totale</th></tr></thead>'
+    +'<thead><tr><th>Polizza</th><th style="text-align:right">Premio</th><th style="text-align:right">Quota</th><th style="text-align:right">Lettera</th><th style="text-align:right">Fattura</th><th style="text-align:right">Fatt.Int.</th><th style="text-align:right">Provv.</th><th style="text-align:right">Totale</th></tr></thead>'
     +'<tbody>'+righe
     +'<tr class="subtotale">'
     +'<td>Totale cliente</td>'
     +'<td class="num">'+fmtE(tot.premio)+'</td>'
+    +'<td class="num">'+fmtE(tot.quota)+'</td>'
     +'<td class="num">'+fmtE(tot.lettera)+'</td>'
     +'<td class="num">'+fmtE(tot.fattura)+'</td>'
     +'<td class="num">'+fmtE(tot.fatturainterm)+'</td>'
@@ -1437,13 +1443,14 @@ function renderContabilita(){
   if(!statsEl||!tabEl)return;
 
   // Calcolo totali generali
-  let totGen={premio:0,lettera:0,fattura:0,fatturainterm:0,provv:0,clienti:0,polizze:0};
+  let totGen={premio:0,quota:0,lettera:0,fattura:0,fatturainterm:0,provv:0,clienti:0,polizze:0};
   const righeClienti=[];
 
   db.clienti.forEach(c=>{
     const {polizze,tot}=calcolaContabilitaCliente(c,annoFiltro);
     if(!polizze.length)return;
     totGen.premio+=tot.premio;
+    totGen.quota+=tot.quota;
     totGen.lettera+=tot.lettera;
     totGen.fattura+=tot.fattura;
     totGen.fatturainterm+=tot.fatturainterm;
@@ -1451,15 +1458,18 @@ function renderContabilita(){
     totGen.clienti++;
     totGen.polizze+=polizze.length;
     const totC=tot.premio+tot.lettera+tot.fattura+tot.fatturainterm+tot.provv;
+    const totIncassato=tot.premio+tot.quota+tot.lettera+tot.fattura+tot.fatturainterm;
+    const totRimessa=tot.premio+tot.quota-tot.provv;
     righeClienti.push(
       '<tr>'
       +'<td style="font-weight:500">'+c.nome+'</td>'
       +'<td class="num">'+fmtE(tot.premio)+'</td>'
+      +'<td class="num">'+fmtE(tot.quota)+'</td>'
       +'<td class="num">'+fmtE(tot.lettera)+'</td>'
-      +'<td class="num">'+fmtE(tot.fattura)+'</td>'
-      +'<td class="num">'+fmtE(tot.fatturainterm)+'</td>'
+      +'<td class="num">'+fmtE(tot.fattura+tot.fatturainterm)+'</td>'
       +'<td class="num">'+fmtE(tot.provv)+'</td>'
-      +'<td class="num" style="font-weight:500">'+fmtE(totC)+'</td>'
+      +'<td class="num">'+fmtE(totRimessa)+'</td>'
+      +'<td class="num" style="font-weight:500;color:#185FA5">'+fmtE(totIncassato)+'</td>'
       +'</tr>'
     );
   });
@@ -1467,15 +1477,19 @@ function renderContabilita(){
   const totTot=totGen.premio+totGen.lettera+totGen.fattura+totGen.fatturainterm+totGen.provv;
 
   // Statistiche
+  const totIncassatoGen=totGen.premio+totGen.quota+totGen.lettera+totGen.fattura+totGen.fatturainterm;
+  const totRimesseGen=totGen.premio+totGen.quota-totGen.provv;
+  const totFattGen=totGen.fattura+totGen.fatturainterm;
   statsEl.innerHTML=
-    '<div class="cont-stat"><div class="cont-stat-label">Clienti con polizze</div><div class="cont-stat-num blu">'+totGen.clienti+'</div></div>'
-    +'<div class="cont-stat"><div class="cont-stat-label">Polizze totali</div><div class="cont-stat-num blu">'+totGen.polizze+'</div></div>'
-    +'<div class="cont-stat"><div class="cont-stat-label">Premi totali</div><div class="cont-stat-num">'+fmtE(totGen.premio)+'</div></div>'
+    '<div class="cont-stat"><div class="cont-stat-label">Clienti</div><div class="cont-stat-num blu">'+totGen.clienti+'</div></div>'
+    +'<div class="cont-stat"><div class="cont-stat-label">Polizze</div><div class="cont-stat-num blu">'+totGen.polizze+'</div></div>'
+    +'<div class="cont-stat"><div class="cont-stat-label">Premi</div><div class="cont-stat-num">'+fmtE(totGen.premio)+'</div></div>'
+    +'<div class="cont-stat"><div class="cont-stat-label">Quote assoc.</div><div class="cont-stat-num">'+fmtE(totGen.quota)+'</div></div>'
     +'<div class="cont-stat"><div class="cont-stat-label">Lettere</div><div class="cont-stat-num">'+fmtE(totGen.lettera)+'</div></div>'
-    +'<div class="cont-stat"><div class="cont-stat-label">Fatture</div><div class="cont-stat-num">'+fmtE(totGen.fattura)+'</div></div>'
-    +'<div class="cont-stat"><div class="cont-stat-label">Fatt. intermediario</div><div class="cont-stat-num">'+fmtE(totGen.fatturainterm)+'</div></div>'
+    +'<div class="cont-stat"><div class="cont-stat-label">Fatture (tot.)</div><div class="cont-stat-num">'+fmtE(totFattGen)+'</div></div>'
     +'<div class="cont-stat"><div class="cont-stat-label">Provvigioni</div><div class="cont-stat-num">'+fmtE(totGen.provv)+'</div></div>'
-    +'<div class="cont-stat" style="background:#E6F1FB;border-color:#185FA5"><div class="cont-stat-label" style="color:#185FA5">Totale generale</div><div class="cont-stat-num blu">'+fmtE(totTot)+'</div></div>';
+    +'<div class="cont-stat" style="background:#EAF3DE;border-color:#639922"><div class="cont-stat-label" style="color:#3B6D11">Rimesse</div><div class="cont-stat-num" style="color:#3B6D11">'+fmtE(totRimesseGen)+'</div></div>'
+    +'<div class="cont-stat" style="background:#E6F1FB;border-color:#185FA5"><div class="cont-stat-label" style="color:#185FA5">Totale incassato</div><div class="cont-stat-num blu">'+fmtE(totIncassatoGen)+'</div></div>';
 
   if(!righeClienti.length){
     tabEl.innerHTML='<div class="empty"><i class="ti ti-report-money"></i>Nessun dato per il periodo selezionato.</div>';
@@ -1486,21 +1500,23 @@ function renderContabilita(){
     +'<thead><tr>'
     +'<th>Cliente</th>'
     +'<th style="text-align:right">Premi</th>'
+    +'<th style="text-align:right">Quote</th>'
     +'<th style="text-align:right">Lettere</th>'
     +'<th style="text-align:right">Fatture</th>'
-    +'<th style="text-align:right">Fatt.Int.</th>'
     +'<th style="text-align:right">Provv.</th>'
-    +'<th style="text-align:right">Totale</th>'
+    +'<th style="text-align:right">Rimesse</th>'
+    +'<th style="text-align:right" style="color:#185FA5">Tot.Incassato</th>'
     +'</tr></thead>'
     +'<tbody>'+righeClienti.join('')
     +'<tr class="totale-generale">'
     +'<td>TOTALE GENERALE'+(annoFiltro?' '+annoFiltro:'')+'</td>'
     +'<td class="num">'+fmtE(totGen.premio)+'</td>'
+    +'<td class="num">'+fmtE(totGen.quota)+'</td>'
     +'<td class="num">'+fmtE(totGen.lettera)+'</td>'
-    +'<td class="num">'+fmtE(totGen.fattura)+'</td>'
-    +'<td class="num">'+fmtE(totGen.fatturainterm)+'</td>'
+    +'<td class="num">'+fmtE(totFattGen)+'</td>'
     +'<td class="num">'+fmtE(totGen.provv)+'</td>'
-    +'<td class="num">'+fmtE(totTot)+'</td>'
+    +'<td class="num">'+fmtE(totRimesseGen)+'</td>'
+    +'<td class="num">'+fmtE(totIncassatoGen)+'</td>'
     +'</tr>'
     +'</tbody></table></div>';
 }
