@@ -290,11 +290,23 @@ textarea{resize:vertical;height:55px}
       <button class="btn-sm" onclick="doLogout()" style="font-size:11px;padding:4px 10px"><i class="ti ti-logout"></i> Esci</button>
     </div>
   </div>
-  <div class="stats">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem;flex-wrap:wrap;gap:8px">
+    <div style="font-size:12px;color:var(--text2);font-weight:500">Riepilogo portafoglio</div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <label style="font-size:11px;color:var(--text2)">Anno:</label>
+      <select id="stats-anno" onchange="renderStats()" style="font-size:12px;padding:4px 8px;width:auto;border-radius:var(--r);border:0.5px solid var(--border2);background:var(--bg);color:var(--text)">
+        <option value="">Tutti</option>
+      </select>
+    </div>
+  </div>
+  <div class="stats" id="stats-grid">
     <div class="stat"><div class="stat-label">Clienti totali</div><div class="stat-num b" id="s-cli">0</div></div>
     <div class="stat"><div class="stat-label">Polizze vive</div><div class="stat-num g" id="s-vive">0</div></div>
     <div class="stat"><div class="stat-label">Scadute</div><div class="stat-num d" id="s-scad">0</div></div>
     <div class="stat"><div class="stat-label">Entro 30 gg</div><div class="stat-num w" id="s-urg">0</div></div>
+    <div class="stat"><div class="stat-label">Rinnovate</div><div class="stat-num b" id="s-rinn">0</div></div>
+    <div class="stat"><div class="stat-label">Nuove (anno)</div><div class="stat-num g" id="s-nuove">0</div></div>
+    <div class="stat"><div class="stat-label">Annullate</div><div class="stat-num d" id="s-ann">0</div></div>
     <div class="stat"><div class="stat-label">Da contattare oggi</div><div class="stat-num b" id="s-promo">0</div></div>
   </div>
   <div class="tabs" id="main-tabs">
@@ -861,12 +873,57 @@ function aggiornaBtnDIPA(){
 document.addEventListener('input',function(e){if(e.target.id==='p-kdrive')aggiornaBtnPolizza();});
 
 /* ---------- STATS ---------- */
+function aggiornaAnniStats(){
+  const sel=document.getElementById('stats-anno');if(!sel)return;
+  const cur=sel.value;
+  const anni=new Set();
+  db.clienti.forEach(c=>c.polizze.forEach(p=>{
+    const a=p.dec?p.dec.substring(0,4):p.scad?p.scad.substring(0,4):'';
+    if(a)anni.add(a);
+  }));
+  const sorted=Array.from(anni).sort().reverse();
+  sel.innerHTML='<option value="">Tutti gli anni</option>'+sorted.map(a=>'<option value="'+a+'">'+a+'</option>').join('');
+  if(cur&&sorted.includes(cur))sel.value=cur;
+  else if(!cur){const annoCorrente=new Date().getFullYear().toString();if(sorted.includes(annoCorrente))sel.value=annoCorrente;}
+}
+
+function filtraPerAnno(p, anno){
+  if(!anno)return true;
+  const a=p.dec?p.dec.substring(0,4):p.scad?p.scad.substring(0,4):'';
+  return a===anno;
+}
+
 function renderStats(){
+  const sel=document.getElementById('stats-anno');
+  const anno=sel?sel.value:'';
+  const annoCorrente=new Date().getFullYear().toString();
+
+  // Clienti totali — sempre tutti
   document.getElementById('s-cli').textContent=db.clienti.length;
-  const vive=db.clienti.flatMap(c=>c.polizze.filter(p=>p.stato==='viva'));
+
+  // Tutte le polizze filtrate per anno
+  const tutteFiltr=db.clienti.flatMap(c=>c.polizze.filter(p=>filtraPerAnno(p,anno)));
+
+  // Vive
+  const vive=tutteFiltr.filter(p=>p.stato==='viva');
   document.getElementById('s-vive').textContent=vive.length;
   document.getElementById('s-scad').textContent=vive.filter(p=>statoScad(p.scad).cls==='scad').length;
   document.getElementById('s-urg').textContent=vive.filter(p=>statoScad(p.scad).cls==='urg').length;
+
+  // Rinnovate
+  document.getElementById('s-rinn').textContent=tutteFiltr.filter(p=>p.stato==='rinnovata').length;
+
+  // Annullate
+  document.getElementById('s-ann').textContent=tutteFiltr.filter(p=>p.stato==='annullata').length;
+
+  // Nuove nell'anno corrente (contratto=nuovo E decorrenza nell'anno corrente)
+  const nuove=db.clienti.flatMap(c=>c.polizze.filter(p=>
+    p.contratto==='nuovo' &&
+    p.dec && p.dec.substring(0,4)===annoCorrente
+  ));
+  document.getElementById('s-nuove').textContent=nuove.length;
+
+  // Da contattare oggi — solo vive senza filtro anno
   let cnt=0;
   db.clienti.forEach(c=>c.polizze.filter(p=>p.stato==='viva').forEach(p=>{if(promoAttiva(p))cnt++;}));
   document.getElementById('s-promo').textContent=cnt;
@@ -1068,7 +1125,7 @@ function salvaCliente(){
   if(editCId){const c=db.clienti.find(x=>x.id===editCId);if(c)Object.assign(c,obj);}
   else db.clienti.push({id:'c'+Date.now(),...obj,polizze:[]});
   const isNew=!editCId;
-  save();renderStats();renderClienti();renderOggi();chiudiModal('modal-cliente');
+  save();aggiornaAnniStats();renderStats();renderClienti();renderOggi();chiudiModal('modal-cliente');
   addLog(isNew?'add':'edit',isNew?`Nuovo cliente: ${nome}`:`Cliente modificato: ${nome}`);
 }
 
@@ -1112,7 +1169,7 @@ function salvaPolizza(){
   const cLog=db.clienti.find(x=>x.id===editPCli);
   const tipLog=tipById(tipo);
   const bd=document.getElementById('body-'+editPCli);if(bd)bd.dataset.open='1';
-  save();renderStats();renderClienti();renderOggi();chiudiModal('modal-polizza');
+  save();aggiornaAnniStats();renderStats();renderClienti();renderOggi();chiudiModal('modal-polizza');
   if(cLog)addLog(isNewP?'add':'edit',isNewP?`Nuova polizza ${tipLog.nome} per ${cLog.nome}`:`Polizza ${tipLog.nome} modificata — ${cLog.nome}`);
 }
 
@@ -1246,7 +1303,7 @@ function avviaApp(){
   document.getElementById('tab-btn-utenti').style.display=u.ruolo==='titolare'?'':'none';
   const tabReg=document.getElementById('tab-btn-registro');
   if(tabReg)tabReg.style.display=u.ruolo==='titolare'?'':'none';
-  applicaPermessi();renderStats();renderOggi();loadNotifSettings();
+  applicaPermessi();aggiornaAnniStats();renderStats();renderOggi();loadNotifSettings();
   caricaLog();
   addLog('login','Accesso: '+u.nome+' ('+u.ruolo+')');
   setTimeout(()=>avviaNotifiche(),600);
