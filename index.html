@@ -225,6 +225,23 @@ textarea{resize:vertical;height:55px}
 .cont-stat-num{font-size:18px;font-weight:500;color:var(--text)}
 .cont-stat-num.blu{color:#185FA5}
 .anno-filter{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+/* ===== IMPORTAZIONE CARTELLA ===== */
+.import-dropzone{border:2px dashed var(--border2);border-radius:var(--rl);padding:2rem;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:1rem}
+.import-dropzone:hover{border-color:#185FA5;background:#E6F1FB}
+.import-dropzone i{font-size:36px;color:var(--text3);display:block;margin-bottom:.5rem}
+.import-dropzone p{font-size:13px;color:var(--text2);margin:0}
+.import-preview{max-height:400px;overflow-y:auto;margin-bottom:1rem}
+.import-cliente-block{border:0.5px solid var(--border);border-radius:var(--r);margin-bottom:.75rem;overflow:hidden}
+.import-cliente-header{background:var(--bg2);padding:.6rem 1rem;font-size:13px;font-weight:500;display:flex;align-items:center;gap:8px}
+.import-cliente-header.nuovo{border-left:3px solid #185FA5}
+.import-cliente-header.esiste{border-left:3px solid #3B6D11}
+.import-doc-list{padding:.5rem 1rem}
+.import-doc-row{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;border-bottom:0.5px solid var(--border)}
+.import-doc-row:last-child{border-bottom:none}
+.import-doc-tipo{font-size:10px;padding:2px 6px;border-radius:10px;background:#E6F1FB;color:#185FA5;font-weight:500;white-space:nowrap}
+.import-summary{background:var(--bg2);border-radius:var(--r);padding:.75rem 1rem;font-size:12px;color:var(--text2);margin-bottom:1rem}
+.import-summary strong{color:var(--text)}
+/* ===== SYNC INDICATOR ===== */
 /* ===== SYNC INDICATOR ===== */
 .sync-indicator{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:3px 8px;border-radius:20px;font-weight:500}
 .sync-indicator.ok{background:#EAF3DE;color:#3B6D11}
@@ -332,6 +349,7 @@ textarea{resize:vertical;height:55px}
         <option value="ok">Tutto in regola</option>
         <option value="promo">Da contattare</option>
       </select>
+      <button class="btn-sec" onclick="apriModalImport()"><i class="ti ti-folder-open"></i> Importa cartella</button>
       <button class="btn-primary" onclick="apriModalCliente()"><i class="ti ti-plus"></i> Nuovo cliente</button>
     </div>
     <div id="clienti-grid" class="clienti-grid"></div>
@@ -579,6 +597,39 @@ textarea{resize:vertical;height:55px}
       <button class="btn-primary" onclick="salvaUtente()"><i class="ti ti-check"></i> Salva utente</button>
     </div>
     <div class="form-msg" id="u-msg"></div>
+  </div>
+</div>
+
+<!-- MODAL IMPORTAZIONE CARTELLA -->
+<div class="modal-overlay" id="modal-import" style="display:none" onclick="if(event.target===this)chiudiModal('modal-import')">
+  <div class="modal-box" style="max-width:680px">
+    <div class="modal-title">
+      <span><i class="ti ti-folder-open"></i> Importa da cartella</span>
+      <button onclick="chiudiModal('modal-import')"><i class="ti ti-x"></i></button>
+    </div>
+
+    <div id="import-step1">
+      <p style="font-size:13px;color:var(--text2);margin-bottom:1rem">
+        Seleziona la cartella principale contenente le sottocartelle dei clienti.<br>
+        Struttura attesa: <code>COGNOME Nome/COGNOME Nome - [intermediario] [compagnia] [tipologia] [anno] (tipo documento).pdf</code>
+      </p>
+      <div class="import-dropzone" onclick="document.getElementById('import-folder-input').click()">
+        <i class="ti ti-folder-open"></i>
+        <p><strong>Clicca per selezionare la cartella</strong></p>
+        <p style="font-size:11px;margin-top:4px">Verranno letti solo i nomi dei file, nessun contenuto viene inviato online</p>
+      </div>
+      <input type="file" id="import-folder-input" webkitdirectory directory multiple style="display:none" onchange="elaboraCartella(this.files)">
+    </div>
+
+    <div id="import-step2" style="display:none">
+      <div class="import-summary" id="import-summary"></div>
+      <div class="import-preview" id="import-preview"></div>
+      <div class="modal-footer">
+        <button class="btn-sec" onclick="resetImport()"><i class="ti ti-arrow-left"></i> Ricomincia</button>
+        <button class="btn-primary" onclick="confermaImport()" id="btn-conferma-import"><i class="ti ti-check"></i> Importa tutto</button>
+      </div>
+      <div class="form-msg" id="import-msg"></div>
+    </div>
   </div>
 </div>
 
@@ -1581,6 +1632,186 @@ function renderContabilita(){
     +'</tr>'
     +'</tbody></table></div>';
 }
+
+
+/* ========== IMPORTAZIONE CARTELLA ========== */
+let _importData = []; // [{nomeCliente, clienteId, isNuovo, docs:[{nome,tipo,anno,filename}]}]
+
+function apriModalImport(){
+  resetImport();
+  document.getElementById('modal-import').style.display='flex';
+}
+
+function resetImport(){
+  _importData=[];
+  document.getElementById('import-step1').style.display='block';
+  document.getElementById('import-step2').style.display='none';
+  document.getElementById('import-folder-input').value='';
+  document.getElementById('import-msg').textContent='';
+}
+
+function parsaNomeFile(filename){
+  // Pattern: COGNOME Nome - [intermediario] [compagnia] [tipologia] [anno] (tipo documento).pdf
+  const base=filename.replace(/\.pdf$/i,'').trim();
+  
+  // Estrai tipo documento dalle parentesi finali
+  const matchTipo=base.match(/\(([^)]+)\)\s*$/);
+  const tipoDoc=matchTipo?matchTipo[1].trim():'';
+  const senzaTipo=base.replace(/\([^)]*\)\s*$/,'').trim();
+  
+  // Estrai anno (4 cifre)
+  const matchAnno=senzaTipo.match(/(\d{4})/);
+  const anno=matchAnno?matchAnno[1]:'';
+  
+  // Determina tipo documento per il gestionale
+  let tipoGest='generico';
+  const tl=tipoDoc.toLowerCase();
+  if(tl.includes('polizza')||tl.includes('contratto'))tipoGest='polizza';
+  else if(tl.includes('quietanza'))tipoGest='contratto';
+  else if(tl.includes('fascicolo')||tl.includes('set')||tl.includes('fi '))tipoGest='fascicolo';
+  else if(tl.includes('dip'))tipoGest='fascicolo';
+  else if(tl.includes('identit')||tl.includes('carta')||tl.includes('cf'))tipoGest='identita';
+  else if(tl.includes('corrispondenza')||tl.includes('lettera'))tipoGest='corrispondenza';
+
+  return{tipoDoc,tipoGest,anno,nomeCompleto:base};
+}
+
+function elaboraCartella(files){
+  if(!files||!files.length)return;
+  
+  // Raggruppa per cartella (primo livello del path)
+  const cartelle={};
+  Array.from(files).forEach(f=>{
+    const parts=f.webkitRelativePath.split('/');
+    if(parts.length<2)return; // file nella root, ignoro
+    const cartella=parts[parts.length-2]; // cartella contenitore del file
+    const filename=parts[parts.length-1];
+    if(!filename.toLowerCase().endsWith('.pdf'))return; // solo PDF
+    if(!cartelle[cartella])cartelle[cartella]=[];
+    cartelle[cartella].push(filename);
+  });
+
+  _importData=[];
+  Object.entries(cartelle).forEach(([cartella,files])=>{
+    // Cerca cliente esistente per nome cartella
+    const nomeNorm=cartella.trim().toLowerCase();
+    const clienteEsist=db.clienti.find(c=>c.nome.toLowerCase()===nomeNorm);
+    
+    const docs=files.map(fn=>{
+      const parsed=parsaNomeFile(fn);
+      return{
+        filename:fn,
+        nome:parsed.nomeCompleto||fn.replace(/\.pdf$/i,''),
+        tipo:parsed.tipoGest,
+        tipoLabel:parsed.tipoDoc,
+        anno:parsed.anno,
+        link:''
+      };
+    });
+
+    _importData.push({
+      nomeCliente:cartella,
+      clienteId:clienteEsist?clienteEsist.id:null,
+      isNuovo:!clienteEsist,
+      docs
+    });
+  });
+
+  mostraAnteprima();
+}
+
+function mostraAnteprima(){
+  const nuovi=_importData.filter(x=>x.isNuovo).length;
+  const esist=_importData.filter(x=>!x.isNuovo).length;
+  const totDocs=_importData.reduce((s,x)=>s+x.docs.length,0);
+
+  document.getElementById('import-summary').innerHTML=
+    `Trovate <strong>${_importData.length} cartelle</strong> con <strong>${totDocs} documenti PDF</strong>. `+
+    `<strong>${nuovi}</strong> client${nuovi!==1?'i':'e'} nuov${nuovi!==1?'i':'o'} da creare · `+
+    `<strong>${esist}</strong> client${esist!==1?'i':'e'} già esistenti.`;
+
+  const tipoLabel={polizza:'Polizza',contratto:'Quietanza',fascicolo:'Fascicolo/DIP',identita:'Identità',corrispondenza:'Corrispondenza',generico:'Generico'};
+
+  document.getElementById('import-preview').innerHTML=_importData.map(item=>`
+    <div class="import-cliente-block">
+      <div class="import-cliente-header ${item.isNuovo?'nuovo':'esiste'}">
+        <i class="ti ti-${item.isNuovo?'user-plus':'user-check'}"></i>
+        ${item.nomeCliente}
+        <span style="font-size:11px;font-weight:400;color:var(--text2);margin-left:4px">${item.isNuovo?'→ nuovo cliente':'→ cliente esistente'}</span>
+        <span style="font-size:11px;font-weight:400;color:var(--text3);margin-left:auto">${item.docs.length} doc${item.docs.length!==1?'umenti':'umento'}</span>
+      </div>
+      <div class="import-doc-list">
+        ${item.docs.map(d=>`
+          <div class="import-doc-row">
+            <i class="ti ti-file-type-pdf" style="color:#A32D2D;font-size:15px;flex-shrink:0"></i>
+            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${d.filename}">${d.nome}</span>
+            ${d.anno?`<span style="font-size:11px;color:var(--text3)">${d.anno}</span>`:''}
+            <span class="import-doc-tipo">${tipoLabel[d.tipo]||'Generico'}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+
+  document.getElementById('import-step1').style.display='none';
+  document.getElementById('import-step2').style.display='block';
+}
+
+function confermaImport(){
+  const msg=document.getElementById('import-msg');
+  let nuoviCreati=0, docAggiunti=0;
+
+  _importData.forEach(item=>{
+    let cid=item.clienteId;
+    
+    // Crea cliente se non esiste
+    if(item.isNuovo){
+      cid='c'+Date.now()+Math.random().toString(36).substr(2,5);
+      db.clienti.push({
+        id:cid,
+        nome:item.nomeCliente,
+        tel:'',tel2:'',email:'',pec:'',ind:'',prof:'',note:'',kdrive:'',
+        polizze:[],
+        documenti:[]
+      });
+      nuoviCreati++;
+    }
+
+    // Aggiungi documenti
+    const c=db.clienti.find(x=>x.id===cid);
+    if(!c)return;
+    if(!c.documenti)c.documenti=[];
+
+    item.docs.forEach(d=>{
+      // Evita duplicati per nome
+      if(c.documenti.some(doc=>doc.nome===d.nome))return;
+      c.documenti.push({
+        id:'d'+Date.now()+Math.random().toString(36).substr(2,5),
+        nome:d.nome,
+        tipo:d.tipo,
+        data:d.anno?d.anno+'-01-01':'',
+        link:''
+      });
+      docAggiunti++;
+    });
+  });
+
+  save();
+  aggiornaAnniStats();
+  renderStats();
+  renderClienti();
+  addLog('add',`Importazione cartella: ${nuoviCreati} clienti creati, ${docAggiunti} documenti aggiunti`);
+  
+  msg.className='form-msg ok';
+  msg.textContent=`✓ Importazione completata: ${nuoviCreati} clienti creati, ${docAggiunti} documenti aggiunti.`;
+  document.getElementById('btn-conferma-import').disabled=true;
+  
+  setTimeout(()=>{
+    chiudiModal('modal-import');
+    switchTab('clienti');
+  },2000);
+}
+
 </script>
 </body>
 </html>
