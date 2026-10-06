@@ -356,7 +356,7 @@ textarea{resize:vertical;height:55px}
   </div>
 
   <div id="tab-impostazioni" class="panel">
-    <div style="background:var(--bg);border:0.5px solid var(--border);border-radius:var(--rl);padding:1.25rem">
+    <div style="background:var(--bg);border:0.5px solid var(--border);border-radius:var(--rl);padding:1.25rem;margin-bottom:1rem">
       <p style="font-size:13px;color:var(--text2);margin-bottom:1rem">Definisci liberamente le tipologie di polizza. Quelle in uso non possono essere eliminate.</p>
       <div id="tip-list"></div>
       <div class="divider"></div>
@@ -367,6 +367,20 @@ textarea{resize:vertical;height:55px}
         <button class="btn-primary" onclick="aggiungiTipologia()"><i class="ti ti-plus"></i> Aggiungi</button>
       </div>
       <div class="form-msg" id="tip-msg"></div>
+    </div>
+
+    <!-- CATEGORIE DOCUMENTI -->
+    <div style="background:var(--bg);border:0.5px solid var(--border);border-radius:var(--rl);padding:1.25rem">
+      <div style="font-size:15px;font-weight:500;margin-bottom:.25rem"><i class="ti ti-folder" style="color:#185FA5"></i> Categorie documenti</div>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:1rem">Definisci le categorie per organizzare i documenti dei clienti per anno e categoria (es. RC Professionale, Sinistri, Comunicazioni...).</p>
+      <div id="cat-doc-list"></div>
+      <div class="divider"></div>
+      <div style="font-size:13px;font-weight:500;margin-bottom:.75rem">Aggiungi nuova categoria</div>
+      <div class="add-tip-row">
+        <input id="cat-doc-nome" placeholder="es. Sinistri, Comunicazioni, Preventivi...">
+        <button class="btn-primary" onclick="aggiungiCatDoc()"><i class="ti ti-plus"></i> Aggiungi</button>
+      </div>
+      <div class="form-msg" id="cat-doc-msg"></div>
     </div>
   </div>
 
@@ -517,6 +531,16 @@ textarea{resize:vertical;height:55px}
     <div class="modal-title"><span id="md-title">Aggiungi documento</span><button onclick="chiudiModal('modal-doc')"><i class="ti ti-x"></i></button></div>
     <div class="form-grid2">
       <div class="form-group form-full"><label>Nome documento *</label><input id="d-nome" placeholder="es. Polizza vita 2024, Carta d'identità..."></div>
+      <div class="form-group"><label>Anno *</label>
+        <select id="d-anno">
+          <option value="">Seleziona anno...</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Categoria *</label>
+        <select id="d-cat">
+          <option value="">Seleziona categoria...</option>
+        </select>
+      </div>
       <div class="form-group"><label>Tipo documento</label>
         <select id="d-tipo">
           <option value="generico">Generico</option>
@@ -785,7 +809,7 @@ textarea{resize:vertical;height:55px}
 
 <script>
 const SK='gcp_v3';
-let db={clienti:[],tipologie:[]};
+let db={clienti:[],tipologie:[],categorie_doc:[]};
 var logDB=[];
 let editCId=null,editPId=null,editPCli=null;
 const PALETTE=['#185FA5','#3B6D11','#A32D2D','#854F0B','#533AB7','#0F6E56','#993C1D','#72243E','#5F5E5A','#D4537E'];
@@ -812,7 +836,8 @@ function setSyncBadge(stato){
 
 async function load(){
   try{const r=localStorage.getItem(SK);if(r){db=JSON.parse(r);}}catch(e){}
-  if(!db||!db.clienti)db={clienti:[],tipologie:defaultTip()};
+  if(!db||!db.clienti)db={clienti:[],tipologie:defaultTip(),categorie_doc:defaultCatDoc()};
+  if(!db.categorie_doc)db.categorie_doc=defaultCatDoc();
   setSyncBadge('loading');
   try{
     const res=await fetch(JBIN_URL+'/latest',{
@@ -867,6 +892,7 @@ async function save(){
   },800);
 }
 function defaultTip(){return[{id:'t1',nome:'Auto',colore:'#185FA5'},{id:'t2',nome:'Casa',colore:'#3B6D11'},{id:'t3',nome:'Vita',colore:'#533AB7'},{id:'t4',nome:'Salute',colore:'#0F6E56'},{id:'t5',nome:'RC Professionale',colore:'#854F0B'},{id:'t6',nome:'Infortuni',colore:'#A32D2D'}];}
+function defaultCatDoc(){return['RC Professionale','Tutela Legale','Auto','Casa','Vita','Sinistri','Comunicazioni','Documenti personali'];}
 
 function oggi(){const d=new Date();d.setHours(0,0,0,0);return d;}
 function fmtD(d){if(!d)return'—';const[y,m,g]=d.split('-');return`${g}/${m}/${y}`;}
@@ -1245,7 +1271,7 @@ function switchTab(t){
   document.querySelectorAll('.tab').forEach((b,i)=>b.classList.toggle('active',tabs[i]===t));
   document.querySelectorAll('.panel').forEach((p,i)=>p.classList.toggle('active',tabs[i]===t));
   if(t==='clienti')renderClienti();
-  if(t==='impostazioni')renderTipologie();
+  if(t==='impostazioni'){renderTipologie();renderCatDoc();}
   if(t==='notifiche')renderNotifSettings();
   if(t==='utenti')renderUtenti();
   if(t==='contabilita'){inizContabilita();renderContabilita();}
@@ -1283,25 +1309,52 @@ function sezioneDocumenti(c){
       <span><i class="ti ti-folder" style="font-size:13px"></i> Documenti (${docs.length})</span>
       <button class="btn-add-doc" onclick="apriModalDoc('${c.id}')"><i class="ti ti-plus"></i> Aggiungi</button>
     </div>`;
+
   if(docs.length){
-    html+=`<div class="docs-list">`;
-    html+=docs.map(doc=>{
-      const ico=docIcona(doc.tipo);const dataStr=doc.data?` · ${fmtD(doc.data)}`:'';
-      const tipoLbl={identita:"Identità/CF",polizza:"Polizza",contratto:"Contratto",fascicolo:"Fascicolo informativo",corrispondenza:"Corrispondenza",generico:"",altro:""}[doc.tipo]||'';
-      return`<div class="doc-row">
-        <i class="${ico.cls} doc-icon ${ico.color}"></i>
-        <div class="doc-info"><div class="doc-nome" title="${doc.nome}">${doc.nome}</div><div class="doc-tipo">${tipoLbl}${dataStr}</div></div>
-        <div class="doc-actions">
-          ${doc.link?`<a href="${doc.link}" target="_blank" rel="noopener" class="open-btn"><i class="ti ti-external-link"></i> Apri</a>`:''}
-          <button onclick="eliminaDocumento('${c.id}','${doc.id}')" class="del-doc"><i class="ti ti-trash"></i></button>
-        </div>
-      </div>`;
-    }).join('');
-    html+=`</div>`;
+    // Raggruppa per anno poi categoria
+    const gruppi={};
+    docs.forEach(doc=>{
+      const anno=doc.anno||'Senza anno';
+      const cat=doc.categoria||'Generale';
+      if(!gruppi[anno])gruppi[anno]={};
+      if(!gruppi[anno][cat])gruppi[anno][cat]=[];
+      gruppi[anno][cat].push(doc);
+    });
+
+    // Ordina anni decrescente
+    const anni=Object.keys(gruppi).sort((a,b)=>b.localeCompare(a));
+    anni.forEach(anno=>{
+      html+=`<div style="margin-bottom:.75rem">
+        <div style="font-size:12px;font-weight:600;color:#185FA5;margin-bottom:5px;display:flex;align-items:center;gap:5px">
+          <i class="ti ti-calendar" style="font-size:13px"></i> ${anno}
+        </div>`;
+      const cats=Object.keys(gruppi[anno]).sort();
+      cats.forEach(cat=>{
+        html+=`<div style="margin-left:.75rem;margin-bottom:.5rem">
+          <div style="font-size:11px;font-weight:500;color:var(--text2);margin-bottom:4px;display:flex;align-items:center;gap:4px">
+            <i class="ti ti-folder" style="font-size:12px"></i> ${cat}
+          </div>
+          <div class="docs-list" style="margin-left:.5rem">`;
+        gruppi[anno][cat].forEach(doc=>{
+          const ico=docIcona(doc.tipo);
+          const tipoLbl={identita:"Identità/CF",polizza:"Polizza",contratto:"Contratto",fascicolo:"Fascicolo informativo",corrispondenza:"Corrispondenza",generico:"",altro:""}[doc.tipo]||'';
+          html+=`<div class="doc-row">
+            <i class="${ico.cls} doc-icon ${ico.color}"></i>
+            <div class="doc-info"><div class="doc-nome" title="${doc.nome}">${doc.nome}</div><div class="doc-tipo">${tipoLbl}</div></div>
+            <div class="doc-actions">
+              ${doc.link?`<a href="${doc.link}" target="_blank" rel="noopener" class="open-btn"><i class="ti ti-external-link"></i> Apri</a>`:''}
+              <button onclick="eliminaDocumento('${c.id}','${doc.id}')" class="del-doc"><i class="ti ti-trash"></i></button>
+            </div>
+          </div>`;
+        });
+        html+=`</div></div>`;
+      });
+      html+=`</div>`;
+    });
   } else {
     html+=`<div style="font-size:12px;color:var(--text3);font-style:italic;margin-bottom:6px">Nessun documento collegato.</div>`;
   }
-  html+=`<div class="kdrive-hint"><i class="ti ti-cloud" style="font-size:13px;flex-shrink:0;color:#0070CC"></i><span>I documenti sono archiviati su <strong>kDrive</strong> nella cartella <strong>${c.nome}/</strong>. Copia il link di condivisione da kDrive e incollalo qui per aprire il file con un clic.</span></div>`;
+  html+=`<div class="kdrive-hint"><i class="ti ti-cloud" style="font-size:13px;flex-shrink:0;color:#0070CC"></i><span>Documenti archiviati su <strong>kDrive</strong> nella cartella <strong>${c.nome}/[Anno]/[Categoria]</strong>.</span></div>`;
   html+=`</div>`;
   return html;
 }
@@ -1309,15 +1362,54 @@ function docIcona(tipo){if(tipo==='polizza'||tipo==='contratto'||tipo==='fascico
 function apriModalDoc(cid,did){
   docClienteId=cid;docEditId=did||null;
   document.getElementById('md-title').textContent=did?'Modifica documento':'Aggiungi documento';
-  document.getElementById('d-nome').value='';document.getElementById('d-tipo').value='generico';document.getElementById('d-data').value='';document.getElementById('d-link').value='';document.getElementById('d-msg').textContent='';
-  if(did){const c=db.clienti.find(x=>x.id===cid);const doc=c&&(c.documenti||[]).find(x=>x.id===did);if(doc){document.getElementById('d-nome').value=doc.nome||'';document.getElementById('d-tipo').value=doc.tipo||'generico';document.getElementById('d-data').value=doc.data||'';document.getElementById('d-link').value=doc.link||'';}}
+  document.getElementById('d-nome').value='';
+  document.getElementById('d-tipo').value='generico';
+  document.getElementById('d-data').value='';
+  document.getElementById('d-link').value='';
+  document.getElementById('d-msg').textContent='';
+
+  // Popola anni (anno corrente + ultimi 5)
+  const annoSel=document.getElementById('d-anno');
+  const annoCorr=new Date().getFullYear();
+  annoSel.innerHTML='<option value="">Seleziona anno...</option>';
+  for(let a=annoCorr;a>=annoCorr-5;a--){
+    annoSel.innerHTML+=`<option value="${a}">${a}</option>`;
+  }
+  annoSel.value=annoCorr;
+
+  // Popola categorie
+  popolaCatDoc();
+
+  if(did){
+    const c=db.clienti.find(x=>x.id===cid);
+    const doc=c&&(c.documenti||[]).find(x=>x.id===did);
+    if(doc){
+      document.getElementById('d-nome').value=doc.nome||'';
+      document.getElementById('d-tipo').value=doc.tipo||'generico';
+      document.getElementById('d-data').value=doc.data||'';
+      document.getElementById('d-link').value=doc.link||'';
+      if(doc.anno)document.getElementById('d-anno').value=doc.anno;
+      if(doc.categoria)document.getElementById('d-cat').value=doc.categoria;
+    }
+  }
   aggiornaBtnDoc();
   document.getElementById('modal-doc').style.display='flex';
+}
+
+function popolaCatDoc(){
+  const sel=document.getElementById('d-cat');
+  if(!sel)return;
+  const cats=db.categorie_doc||[];
+  sel.innerHTML='<option value="">Seleziona categoria...</option>'+cats.map(c=>`<option value="${c}">${c}</option>`).join('');
 }
 function salvaDocumento(){
   const nome=document.getElementById('d-nome').value.trim();const msg=document.getElementById('d-msg');
   if(!nome){msg.className='form-msg err';msg.textContent='Il nome del documento è obbligatorio.';return;}
-  const obj={id:docEditId||'d'+Date.now(),nome,tipo:document.getElementById('d-tipo').value,data:document.getElementById('d-data').value,link:document.getElementById('d-link').value.trim()};
+  const anno=document.getElementById('d-anno').value;
+  const categoria=document.getElementById('d-cat').value;
+  if(!anno){msg.className='form-msg err';msg.textContent='Seleziona l'anno.';return;}
+  if(!categoria){msg.className='form-msg err';msg.textContent='Seleziona una categoria.';return;}
+  const obj={id:docEditId||'d'+Date.now(),nome,tipo:document.getElementById('d-tipo').value,anno,categoria,data:document.getElementById('d-data').value,link:document.getElementById('d-link').value.trim()};
   const c=db.clienti.find(x=>x.id===docClienteId);if(!c)return;
   if(!c.documenti)c.documenti=[];
   if(docEditId){const idx=c.documenti.findIndex(x=>x.id===docEditId);if(idx>=0)c.documenti[idx]=obj;}else c.documenti.push(obj);
@@ -1810,6 +1902,41 @@ function confermaImport(){
     chiudiModal('modal-import');
     switchTab('clienti');
   },2000);
+}
+
+
+
+/* ========== CATEGORIE DOCUMENTI ========== */
+function renderCatDoc(){
+  if(!db.categorie_doc)db.categorie_doc=defaultCatDoc();
+  const list=document.getElementById('cat-doc-list');
+  if(!list)return;
+  list.innerHTML=db.categorie_doc.length
+    ?db.categorie_doc.map((c,i)=>`<div class="tip-row">
+        <i class="ti ti-folder" style="font-size:14px;color:#185FA5"></i>
+        <div class="tip-nome">${c}</div>
+        <button onclick="eliminaCatDoc(${i})" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:14px"><i class="ti ti-trash"></i></button>
+      </div>`).join('')
+    :`<div style="font-size:13px;color:var(--text2);padding:.5rem 0">Nessuna categoria definita.</div>`;
+}
+
+function aggiungiCatDoc(){
+  const nome=document.getElementById('cat-doc-nome').value.trim();
+  const msg=document.getElementById('cat-doc-msg');
+  if(!nome){msg.className='form-msg err';msg.textContent='Inserisci un nome.';return;}
+  if(!db.categorie_doc)db.categorie_doc=[];
+  if(db.categorie_doc.some(c=>c.toLowerCase()===nome.toLowerCase())){msg.className='form-msg err';msg.textContent='Categoria già presente.';return;}
+  db.categorie_doc.push(nome);
+  document.getElementById('cat-doc-nome').value='';
+  msg.className='form-msg ok';msg.textContent='✓ Aggiunta.';
+  setTimeout(()=>msg.textContent='',2000);
+  save();renderCatDoc();
+}
+
+function eliminaCatDoc(idx){
+  if(!confirm('Eliminare questa categoria?'))return;
+  db.categorie_doc.splice(idx,1);
+  save();renderCatDoc();
 }
 
 </script>
