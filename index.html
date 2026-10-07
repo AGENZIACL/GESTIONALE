@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Gestione Clienti & Polizze</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
 
@@ -853,6 +856,7 @@ async function load(){
         db=data;
         if(!db.clienti)db.clienti=[];
         if(!db.tipologie||!db.tipologie.length)db.tipologie=defaultTip();
+        if(!db.categorie_doc)db.categorie_doc=defaultCatDoc();
         localStorage.setItem(SK,JSON.stringify(db));
       }
       setSyncBadge('ok');
@@ -1407,7 +1411,7 @@ function salvaDocumento(){
   if(!nome){msg.className='form-msg err';msg.textContent='Il nome del documento è obbligatorio.';return;}
   const anno=document.getElementById('d-anno').value;
   const categoria=document.getElementById('d-cat').value;
-  if(!anno){msg.className='form-msg err';msg.textContent='Seleziona l'anno.';return;}
+  if(!anno){msg.className='form-msg err';msg.textContent="Seleziona l'anno.";return;}
   if(!categoria){msg.className='form-msg err';msg.textContent='Seleziona una categoria.';return;}
   const obj={id:docEditId||'d'+Date.now(),nome,tipo:document.getElementById('d-tipo').value,anno,categoria,data:document.getElementById('d-data').value,link:document.getElementById('d-link').value.trim()};
   const c=db.clienti.find(x=>x.id===docClienteId);if(!c)return;
