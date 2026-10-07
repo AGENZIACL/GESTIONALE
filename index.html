@@ -228,6 +228,26 @@ textarea{resize:vertical;height:55px}
 .cont-stat-num{font-size:18px;font-weight:500;color:var(--text)}
 .cont-stat-num.blu{color:#185FA5}
 .anno-filter{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+/* ===== ALBERO DOCUMENTI ===== */
+.doc-tree{margin-bottom:.5rem}
+.doc-tree-anno{border:0.5px solid var(--border);border-radius:var(--r);margin-bottom:6px;overflow:hidden}
+.doc-tree-anno-header{display:flex;align-items:center;gap:8px;padding:.55rem .9rem;cursor:pointer;background:var(--bg2);user-select:none;transition:background .15s}
+.doc-tree-anno-header:hover{background:var(--bg3)}
+.doc-tree-anno-header .anno-label{font-size:13px;font-weight:600;color:#185FA5;flex:1}
+.doc-tree-anno-header .anno-count{font-size:11px;color:var(--text3)}
+.doc-tree-anno-header .chevron{font-size:13px;color:var(--text3);transition:transform .2s}
+.doc-tree-anno-header.open .chevron{transform:rotate(90deg)}
+.doc-tree-anno-body{display:none;padding:.5rem .75rem}
+.doc-tree-anno-body.open{display:block}
+.doc-tree-cat{margin-bottom:.5rem}
+.doc-tree-cat-header{display:flex;align-items:center;gap:6px;padding:.4rem .65rem;cursor:pointer;border-radius:var(--r);background:var(--bg);border:0.5px solid var(--border);user-select:none;transition:background .15s}
+.doc-tree-cat-header:hover{background:var(--bg2)}
+.doc-tree-cat-header .cat-label{font-size:12px;font-weight:500;color:var(--text);flex:1}
+.doc-tree-cat-header .cat-count{font-size:10px;color:var(--text3)}
+.doc-tree-cat-header .chevron-cat{font-size:12px;color:var(--text3);transition:transform .2s}
+.doc-tree-cat-header.open .chevron-cat{transform:rotate(90deg)}
+.doc-tree-cat-body{display:none;padding:.4rem 0 0 1rem}
+.doc-tree-cat-body.open{display:block}
 /* ===== IMPORTAZIONE CARTELLA ===== */
 .import-dropzone{border:2px dashed var(--border2);border-radius:var(--rl);padding:2rem;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:1rem}
 .import-dropzone:hover{border-color:#185FA5;background:#E6F1FB}
@@ -1308,11 +1328,12 @@ function testNotifiche(){saveNotifSettings();localStorage.removeItem(chiaveOggi(
 let docClienteId=null,docEditId=null;
 function sezioneDocumenti(c){
   const docs=c.documenti||[];
-  let html=`<div class="docs-section">
-    <div class="docs-title">
-      <span><i class="ti ti-folder" style="font-size:13px"></i> Documenti (${docs.length})</span>
-      <button class="btn-add-doc" onclick="apriModalDoc('${c.id}')"><i class="ti ti-plus"></i> Aggiungi</button>
-    </div>`;
+  const annoCorrente=new Date().getFullYear().toString();
+  let html='<div class="docs-section">'
+    +'<div class="docs-title">'
+    +'<span><i class="ti ti-folder" style="font-size:13px"></i> Documenti ('+docs.length+')</span>'
+    +'<button class="btn-add-doc" onclick="apriModalDoc(''+c.id+'')"><i class="ti ti-plus"></i> Aggiungi</button>'
+    +'</div>';
 
   if(docs.length){
     // Raggruppa per anno poi categoria
@@ -1325,42 +1346,76 @@ function sezioneDocumenti(c){
       gruppi[anno][cat].push(doc);
     });
 
-    // Ordina anni decrescente
+    const tipoLbl={identita:'Identità/CF',polizza:'Polizza',contratto:'Contratto',fascicolo:'Fascicolo informativo',corrispondenza:'Corrispondenza',generico:'',altro:''};
     const anni=Object.keys(gruppi).sort((a,b)=>b.localeCompare(a));
-    anni.forEach(anno=>{
-      html+=`<div style="margin-bottom:.75rem">
-        <div style="font-size:12px;font-weight:600;color:#185FA5;margin-bottom:5px;display:flex;align-items:center;gap:5px">
-          <i class="ti ti-calendar" style="font-size:13px"></i> ${anno}
-        </div>`;
+    const uid=c.id; // per ID univoci nei toggle
+
+    html+='<div class="doc-tree">';
+    anni.forEach((anno,ai)=>{
+      const isAnnoAperto=anno===annoCorrente||ai===0;
+      const totAnno=Object.values(gruppi[anno]).reduce((s,d)=>s+d.length,0);
+      const annoId='dt-'+uid+'-'+anno.replace(/\s/g,'_');
+
+      html+='<div class="doc-tree-anno">'
+        +'<div class="doc-tree-anno-header'+(isAnnoAperto?' open':'')+'" onclick="toggleDocTree(''+annoId+'')" id="h-'+annoId+'">'
+        +'<i class="ti ti-calendar" style="font-size:14px;color:#185FA5"></i>'
+        +'<span class="anno-label">'+anno+'</span>'
+        +'<span class="anno-count">'+totAnno+' doc'+( totAnno!==1?'umenti':'umento')+'</span>'
+        +'<i class="ti ti-chevron-right chevron"></i>'
+        +'</div>'
+        +'<div class="doc-tree-anno-body'+(isAnnoAperto?' open':'')+'" id="'+annoId+'">';
+
       const cats=Object.keys(gruppi[anno]).sort();
-      cats.forEach(cat=>{
-        html+=`<div style="margin-left:.75rem;margin-bottom:.5rem">
-          <div style="font-size:11px;font-weight:500;color:var(--text2);margin-bottom:4px;display:flex;align-items:center;gap:4px">
-            <i class="ti ti-folder" style="font-size:12px"></i> ${cat}
-          </div>
-          <div class="docs-list" style="margin-left:.5rem">`;
+      cats.forEach((cat,ci)=>{
+        const catId='dc-'+uid+'-'+anno.replace(/\s/g,'_')+'-'+ci;
+        const isCatAperta=isAnnoAperto;
+        const ndoc=gruppi[anno][cat].length;
+
+        html+='<div class="doc-tree-cat">'
+          +'<div class="doc-tree-cat-header'+(isCatAperta?' open':'')+'" onclick="toggleDocTree(''+catId+'')" id="h-'+catId+'">'
+          +'<i class="ti ti-folder" style="font-size:13px;color:#854F0B"></i>'
+          +'<span class="cat-label">'+cat+'</span>'
+          +'<span class="cat-count">'+ndoc+'</span>'
+          +'<i class="ti ti-chevron-right chevron-cat"></i>'
+          +'</div>'
+          +'<div class="doc-tree-cat-body'+(isCatAperta?' open':'')+'" id="'+catId+'">'
+          +'<div class="docs-list">';
+
         gruppi[anno][cat].forEach(doc=>{
           const ico=docIcona(doc.tipo);
-          const tipoLbl={identita:"Identità/CF",polizza:"Polizza",contratto:"Contratto",fascicolo:"Fascicolo informativo",corrispondenza:"Corrispondenza",generico:"",altro:""}[doc.tipo]||'';
-          html+=`<div class="doc-row">
-            <i class="${ico.cls} doc-icon ${ico.color}"></i>
-            <div class="doc-info"><div class="doc-nome" title="${doc.nome}">${doc.nome}</div><div class="doc-tipo">${tipoLbl}</div></div>
-            <div class="doc-actions">
-              ${doc.link?`<a href="${doc.link}" target="_blank" rel="noopener" class="open-btn"><i class="ti ti-external-link"></i> Apri</a>`:''}
-              <button onclick="eliminaDocumento('${c.id}','${doc.id}')" class="del-doc"><i class="ti ti-trash"></i></button>
-            </div>
-          </div>`;
+          const tl=tipoLbl[doc.tipo]||'';
+          html+='<div class="doc-row">'
+            +'<i class="'+ico.cls+' doc-icon '+ico.color+'"></i>'
+            +'<div class="doc-info">'
+            +'<div class="doc-nome" title="'+doc.nome+'">'+doc.nome+'</div>'
+            +(tl?'<div class="doc-tipo">'+tl+'</div>':'')
+            +'</div>'
+            +'<div class="doc-actions">'
+            +(doc.link?'<a href="'+doc.link+'" target="_blank" rel="noopener" class="open-btn"><i class="ti ti-external-link"></i> Apri</a>':'')
+            +'<button onclick="eliminaDocumento(''+c.id+'',''+doc.id+'')" class="del-doc"><i class="ti ti-trash"></i></button>'
+            +'</div>'
+            +'</div>';
         });
-        html+=`</div></div>`;
+        html+='</div></div></div>';
       });
-      html+=`</div>`;
+      html+='</div></div>';
     });
+    html+='</div>';
   } else {
-    html+=`<div style="font-size:12px;color:var(--text3);font-style:italic;margin-bottom:6px">Nessun documento collegato.</div>`;
+    html+='<div style="font-size:12px;color:var(--text3);font-style:italic;margin-bottom:6px">Nessun documento collegato.</div>';
   }
-  html+=`<div class="kdrive-hint"><i class="ti ti-cloud" style="font-size:13px;flex-shrink:0;color:#0070CC"></i><span>Documenti archiviati su <strong>kDrive</strong> nella cartella <strong>${c.nome}/[Anno]/[Categoria]</strong>.</span></div>`;
-  html+=`</div>`;
+  html+='<div class="kdrive-hint"><i class="ti ti-cloud" style="font-size:13px;flex-shrink:0;color:#0070CC"></i>'
+    +'<span>Documenti su <strong>kDrive</strong> nella cartella <strong>'+c.nome+'/[Anno]/[Categoria]</strong>.</span></div>';
+  html+='</div>';
   return html;
+}
+
+function toggleDocTree(id){
+  const body=document.getElementById(id);
+  const header=document.getElementById('h-'+id);
+  if(!body||!header)return;
+  body.classList.toggle('open');
+  header.classList.toggle('open');
 }
 function docIcona(tipo){if(tipo==='polizza'||tipo==='contratto'||tipo==='fascicolo')return{cls:'ti ti-file-type-pdf',color:'pdf'};if(tipo==='identita')return{cls:'ti ti-id',color:'img'};if(tipo==='corrispondenza')return{cls:'ti ti-mail',color:'word'};return{cls:'ti ti-file',color:'generic'};}
 function apriModalDoc(cid,did){
