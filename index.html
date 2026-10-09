@@ -552,6 +552,7 @@ textarea{resize:vertical;height:55px}
 <div class="modal-overlay" id="modal-doc" style="display:none" onclick="if(event.target===this)chiudiModal('modal-doc')">
   <div class="modal-box" style="max-width:520px">
     <div class="modal-title"><span id="md-title">Aggiungi documento</span><button onclick="chiudiModal('modal-doc')"><i class="ti ti-x"></i></button></div>
+    <div id="d-extra-info"></div>
     <div class="form-grid2">
       <div class="form-group form-full"><label>Nome documento *</label><input id="d-nome" placeholder="es. Polizza vita 2024, Carta d'identità..."></div>
       <div class="form-group"><label>Anno *</label>
@@ -1380,7 +1381,7 @@ function sezioneDocumenti(c){
           parts.push('<div class="doc-row">');
           parts.push('<i class="'+ico.cls+' doc-icon '+ico.color+'"></i>');
           parts.push('<div class="doc-info">');
-          parts.push('<div class="doc-nome" title="'+doc.nome+'">'+doc.nome+'</div>');
+          parts.push('<div class="doc-nome" style="cursor:pointer;color:#185FA5" title="Clicca per modificare" data-cid="'+c.id+'" data-did="'+doc.id+'" onclick="apriModalDoc(this.dataset.cid,this.dataset.did)">'+doc.nome+'</div>');
           if(tl)parts.push('<div class="doc-tipo">'+tl+'</div>');
           parts.push('</div>');
           parts.push('<div class="doc-actions">');
@@ -1441,7 +1442,19 @@ function apriModalDoc(cid,did){
       document.getElementById('d-link').value=doc.link||'';
       if(doc.anno)document.getElementById('d-anno').value=doc.anno;
       if(doc.categoria)document.getElementById('d-cat').value=doc.categoria;
+      // Mostra dati extra estratti dall importazione
+      const extraEl=document.getElementById('d-extra-info');
+      if(extraEl){
+        const righe=[];
+        if(doc.numeroPolizza)righe.push('N° polizza: <strong>'+doc.numeroPolizza+'</strong>');
+        if(doc.intermediario)righe.push('Intermediario: <strong>'+doc.intermediario+'</strong>');
+        if(doc.compagnia)righe.push('Compagnia: <strong>'+doc.compagnia+'</strong>');
+        extraEl.innerHTML=righe.length?'<div class="kdrive-hint" style="margin-bottom:.5rem"><i class="ti ti-scan"></i> Dati estratti dal file: '+righe.join(' · ')+'</div>':'';
+      }
     }
+  } else {
+    const extraEl=document.getElementById('d-extra-info');
+    if(extraEl)extraEl.innerHTML='';
   }
   aggiornaBtnDoc();
   document.getElementById('modal-doc').style.display='flex';
@@ -1794,29 +1807,61 @@ function resetImport(){
 }
 
 function parsaNomeFile(filename){
-  // Pattern: COGNOME Nome - [intermediario] [compagnia] [tipologia] [anno] (tipo documento).pdf
+  // Pattern atteso: COGNOME Nome - [intermediario] [compagnia] [tipologia] [anno] ([tipo documento]).pdf
+  // oppure:         COGNOME Nome - [intermediario] [compagnia] [tipologia] ([tipo documento anno]).pdf
   const base=filename.replace(/\.pdf$/i,'').trim();
-  
-  // Estrai tipo documento dalle parentesi finali
-  const matchTipo=base.match(/\(([^)]+)\)\s*$/);
-  const tipoDoc=matchTipo?matchTipo[1].trim():'';
-  const senzaTipo=base.replace(/\([^)]*\)\s*$/,'').trim();
-  
-  // Estrai anno (4 cifre)
-  const matchAnno=senzaTipo.match(/(\d{4})/);
+
+  // Estrai TUTTO il contenuto delle parentesi finali
+  const matchParentesi=base.match(/\(([^)]+)\)\s*$/);
+  const contenutoParentesi=matchParentesi?matchParentesi[1].trim():'';
+  const senzaParentesi=base.replace(/\([^)]*\)\s*$/,'').trim();
+
+  // Cerca anno in tutto il filename (dentro e fuori parentesi)
+  const matchAnno=base.match(/\b(20\d{2}|19\d{2})\b/);
   const anno=matchAnno?matchAnno[1]:'';
-  
+
+  // Cerca numero polizza (pattern alfanumerico tipo OX00030373, RCM20080061872, HEC000503T/P/2025)
+  const matchNum=senzaParentesi.match(/\b([A-Z]{2,}\d{6,}[A-Z0-9/]*|\d{6,})\b/);
+  const numeroPolizza=matchNum?matchNum[1]:'';
+
+  // Tipo documento dal contenuto delle parentesi (rimuovi anno se presente)
+  const tipoDoc=contenutoParentesi.replace(/\b(20\d{2}|19\d{2})\b/,'').replace(/^[\s,\-]+|[\s,\-]+$/g,'').trim()||contenutoParentesi;
+
   // Determina tipo documento per il gestionale
   let tipoGest='generico';
-  const tl=tipoDoc.toLowerCase();
-  if(tl.includes('polizza')||tl.includes('contratto'))tipoGest='polizza';
-  else if(tl.includes('quietanza'))tipoGest='contratto';
-  else if(tl.includes('fascicolo')||tl.includes('set')||tl.includes('fi '))tipoGest='fascicolo';
+  const tl=(tipoDoc+' '+contenutoParentesi).toLowerCase();
+  if(tl.includes('polizza'))tipoGest='polizza';
+  else if(tl.includes('quietanza')||tl.includes('appendice'))tipoGest='contratto';
+  else if(tl.includes('fascicolo')||tl.includes('set'))tipoGest='fascicolo';
+  else if(tl.includes('dip aggiuntivo'))tipoGest='fascicolo';
   else if(tl.includes('dip'))tipoGest='fascicolo';
-  else if(tl.includes('identit')||tl.includes('carta')||tl.includes('cf'))tipoGest='identita';
-  else if(tl.includes('corrispondenza')||tl.includes('lettera'))tipoGest='corrispondenza';
+  else if(tl.includes('contratto'))tipoGest='polizza';
+  else if(tl.includes('identit')||tl.includes('carta')||tl.includes(' cf '))tipoGest='identita';
+  else if(tl.includes('corrispondenza')||tl.includes('lettera')||tl.includes('comunicazione'))tipoGest='corrispondenza';
+  else if(tl.includes('sinistro')||tl.includes('denuncia'))tipoGest='altro';
 
-  return{tipoDoc,tipoGest,anno,nomeCompleto:base};
+  // Estrai intermediario e compagnia dalla parte dopo il trattino
+  // Pattern: COGNOME Nome - [SIGLA_INTERM] [SIGLA_COMP] [tipologia] [anno]
+  let intermediario='', compagnia='', tipologia='';
+  const dopoTreatino=senzaParentesi.replace(/^[^-]+-\s*/,'').trim();
+  // Sigla intermediario (2-4 lettere maiuscole)
+  const matchInterm=dopoTreatino.match(/^([A-Z]{2,4})\s+/);
+  if(matchInterm){
+    intermediario=matchInterm[1];
+    const resto=dopoTreatino.slice(matchInterm[0].length);
+    // Sigla compagnia (2-5 lettere maiuscole o numero)
+    const matchComp=resto.match(/^([A-Z0-9]{2,5})\s+/);
+    if(matchComp){
+      compagnia=matchComp[1];
+      tipologia=resto.slice(matchComp[0].length).replace(/\b(20\d{2}|19\d{2})\b/,'').trim();
+    } else {
+      tipologia=resto.replace(/\b(20\d{2}|19\d{2})\b/,'').trim();
+    }
+  } else {
+    tipologia=dopoTreatino.replace(/\b(20\d{2}|19\d{2})\b/,'').trim();
+  }
+
+  return{tipoDoc,tipoGest,anno,numeroPolizza,intermediario,compagnia,tipologia,nomeCompleto:base};
 }
 
 function elaboraCartella(files){
@@ -1840,7 +1885,7 @@ function elaboraCartella(files){
     const nomeNorm=cartella.trim().toLowerCase();
     const clienteEsist=db.clienti.find(c=>c.nome.toLowerCase()===nomeNorm);
     
-    const docs=files.map(fn=>{
+    const docs=files.map(function(fn){
       const parsed=parsaNomeFile(fn);
       return{
         filename:fn,
@@ -1848,6 +1893,10 @@ function elaboraCartella(files){
         tipo:parsed.tipoGest,
         tipoLabel:parsed.tipoDoc,
         anno:parsed.anno,
+        numeroPolizza:parsed.numeroPolizza,
+        intermediario:parsed.intermediario,
+        compagnia:parsed.compagnia,
+        tipologia:parsed.tipologia,
         link:''
       };
     });
@@ -1885,11 +1934,16 @@ function mostraAnteprima(){
       </div>
       <div class="import-doc-list">
         ${item.docs.map(d=>`
-          <div class="import-doc-row">
+          <div class="import-doc-row" style="flex-wrap:wrap;gap:4px">
             <i class="ti ti-file-type-pdf" style="color:#A32D2D;font-size:15px;flex-shrink:0"></i>
-            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${d.filename}">${d.nome}</span>
-            ${d.anno?`<span style="font-size:11px;color:var(--text3)">${d.anno}</span>`:''}
-            <span class="import-doc-tipo">${tipoLabel[d.tipo]||'Generico'}</span>
+            <span style="flex:1;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${d.filename}">${d.nome}</span>
+            <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+              ${d.anno?`<span style="font-size:10px;padding:2px 5px;background:#EAF3DE;color:#3B6D11;border-radius:8px">${d.anno}</span>`:'<span style="font-size:10px;padding:2px 5px;background:#FCEBEB;color:#A32D2D;border-radius:8px">anno ?</span>'}
+              ${d.intermediario?`<span style="font-size:10px;padding:2px 5px;background:#FAEEDA;color:#854F0B;border-radius:8px">${d.intermediario}</span>`:''}
+              ${d.compagnia?`<span style="font-size:10px;padding:2px 5px;background:#E6F1FB;color:#185FA5;border-radius:8px">${d.compagnia}</span>`:''}
+              ${d.numeroPolizza?`<span style="font-size:10px;padding:2px 5px;background:var(--bg2);color:var(--text2);border-radius:8px">N° ${d.numeroPolizza}</span>`:''}
+              <span class="import-doc-tipo">${tipoLabel[d.tipo]||'Generico'}</span>
+            </div>
           </div>
         `).join('')}
       </div>
@@ -1926,14 +1980,18 @@ function confermaImport(){
     if(!c.documenti)c.documenti=[];
 
     item.docs.forEach(d=>{
-      // Evita duplicati per nome
       if(c.documenti.some(doc=>doc.nome===d.nome))return;
       c.documenti.push({
         id:'d'+Date.now()+Math.random().toString(36).substr(2,5),
         nome:d.nome,
         tipo:d.tipo,
+        anno:d.anno||'',
+        categoria:d.tipologia||'',
         data:d.anno?d.anno+'-01-01':'',
-        link:''
+        link:'',
+        numeroPolizza:d.numeroPolizza||'',
+        intermediario:d.intermediario||'',
+        compagnia:d.compagnia||''
       });
       docAggiunti++;
     });
