@@ -1908,72 +1908,101 @@ function parsaNomeFile(filename){
 function elaboraCartella(files){
   if(!files||!files.length)return;
 
-  // Estrae anno tra parentesi dal nome cartella: "COGNOME Nome (2025)" -> "2025"
-  function estraiAnnoCartella(nome){
+  // Estrae anno tra parentesi: "COGNOME Nome (2025)" -> "2025"
+  function estraiAnno(nome){
     const m=nome.match(/\((19|20)\d{2}\)\s*$/);
-    return m?m[0].replace(/[()]/g,'').trim():'';
+    return m?m[0].replace(/[()\s]/g,''):'';
   }
 
-  // Estrae nome cliente da cartella anno: "COGNOME Nome (2025)" -> "COGNOME Nome"
-  function estraiNomeCliente(nome){
+  // Rimuove anno tra parentesi dal nome: "COGNOME Nome (2025)" -> "COGNOME Nome"
+  function rimuoviAnno(nome){
     return nome.replace(/\s*\((19|20)\d{2}\)\s*$/,'').trim();
   }
 
-  // Verifica se il nome è SOLO un anno: "2025", "(2025)"
+  // Verifica se nome è SOLO un anno numerico
   function isSoloAnno(nome){
     const n=nome.trim();
     return /^(19|20)\d{2}$/.test(n)||/^\((19|20)\d{2}\)$/.test(n);
   }
 
-  // Raggruppa i file per cartella contenitore diretta
-  const cartelleMap={};
-  Array.from(files).forEach(function(f){
-    const parts=f.webkitRelativePath.split('/');
-    if(parts.length<2)return;
-    const filename=parts[parts.length-1];
-    if(!filename.toLowerCase().endsWith('.pdf'))return;
-    // Cartella contenitore diretta del file
-    const cartella=parts[parts.length-2];
-    if(!cartelleMap[cartella])cartelleMap[cartella]=[];
-    cartelleMap[cartella].push(filename);
-  });
-
-  // Costruisce _importData raggruppando per cliente
+  // Raggruppa file per path completo
   const clientiMap={};
 
-  Object.entries(cartelleMap).forEach(function([cartella,fileList]){
-    if(isSoloAnno(cartella))return; // ignora cartelle come "2025" o "(2025)"
+  Array.from(files).forEach(function(f){
+    const parts=f.webkitRelativePath.split('/');
+    const filename=parts[parts.length-1];
+    if(!filename.toLowerCase().endsWith('.pdf'))return;
 
-    const annoCartella=estraiAnnoCartella(cartella);
-    // Se la cartella ha un anno tra parentesi → è una sottocartella anno
-    // Il nome cliente si ottiene rimuovendo l'anno
-    const nomeCliente=annoCartella?estraiNomeCliente(cartella):cartella.trim();
-    const anno=annoCartella||'';
+    let nomeCliente='';
+    let annoCartella='';
 
+    if(parts.length===2){
+      // Struttura: CartellaSel/file.pdf
+      // La cartella selezionata è direttamente il contenitore
+      const cartellaDir=parts[0];
+      if(isSoloAnno(cartellaDir))return;
+      annoCartella=estraiAnno(cartellaDir);
+      nomeCliente=annoCartella?rimuoviAnno(cartellaDir):cartellaDir.trim();
+
+    } else if(parts.length===3){
+      // Struttura: CartellaSel/SottoCartella/file.pdf
+      // CartellaSel può essere la radice cliente
+      // SottoCartella può essere la cartella anno
+      const radice=parts[0];
+      const sotto=parts[1];
+
+      if(isSoloAnno(radice))return;
+
+      const annoRadice=estraiAnno(radice);
+      const annoSotto=estraiAnno(sotto)||( /^(19|20)\d{2}$/.test(sotto.trim())?sotto.trim():'' );
+
+      if(annoRadice){
+        // Es: "CIAVARELLA Michele (2025)/file.pdf" dentro una radice
+        nomeCliente=rimuoviAnno(radice);
+        annoCartella=annoRadice;
+      } else if(annoSotto){
+        // Es: "CIAVARELLA Michele/CIAVARELLA Michele (2025)/file.pdf"
+        nomeCliente=rimuoviAnno(radice)||radice.trim();
+        annoCartella=annoSotto;
+      } else {
+        nomeCliente=radice.trim();
+        annoCartella='';
+      }
+
+    } else if(parts.length>=4){
+      // Struttura più profonda — usa i primi due livelli
+      const radice=parts[0];
+      const sotto=parts[1];
+      if(isSoloAnno(radice))return;
+      const annoSotto=estraiAnno(sotto)||( /^(19|20)\d{2}$/.test(sotto.trim())?sotto.trim():'' );
+      nomeCliente=rimuoviAnno(radice)||radice.trim();
+      annoCartella=annoSotto||estraiAnno(radice)||'';
+    }
+
+    if(!nomeCliente)return;
     if(!clientiMap[nomeCliente])clientiMap[nomeCliente]=[];
 
-    fileList.forEach(function(fn){
-      const parsed=parsaNomeFile(fn);
-      // Anno: prima prova quello della cartella, poi quello del filename
-      const annoFinale=annoCartella||parsed.anno||'';
-      clientiMap[nomeCliente].push({
-        filename:fn,
-        nome:parsed.nomeCompleto||fn.replace(/\.pdf$/i,''),
-        tipo:parsed.tipoGest,
-        tipoLabel:parsed.tipoDoc,
-        anno:annoFinale,
-        annoCartella:annoCartella,
-        numeroPolizza:parsed.numeroPolizza,
-        intermediario:parsed.intermediario,
-        compagnia:parsed.compagnia,
-        tipologia:parsed.tipologia,
-        link:''
-      });
+    const parsed=parsaNomeFile(filename);
+    const annoFinale=annoCartella||parsed.anno||'';
+
+    clientiMap[nomeCliente].push({
+      filename:filename,
+      nome:parsed.nomeCompleto||filename.replace(/\.pdf$/i,''),
+      tipo:parsed.tipoGest,
+      tipoLabel:parsed.tipoDoc,
+      anno:annoFinale,
+      annoCartella:annoCartella,
+      numeroPolizza:parsed.numeroPolizza,
+      intermediario:parsed.intermediario,
+      compagnia:parsed.compagnia,
+      tipologia:parsed.tipologia,
+      link:''
     });
   });
 
   _importData=[];
   Object.entries(clientiMap).forEach(function([nomeCliente,docs]){
+    if(!nomeCliente||isSoloAnno(nomeCliente))return;
     const nomeNorm=nomeCliente.toLowerCase();
     const clienteEsist=db.clienti.find(function(c){return c.nome.toLowerCase()===nomeNorm;});
     _importData.push({
@@ -1983,6 +2012,11 @@ function elaboraCartella(files){
       docs:docs
     });
   });
+
+  if(!_importData.length){
+    alert('Nessun documento PDF trovato nella struttura selezionata.\nVerifica che la cartella contenga file PDF.');
+    return;
+  }
 
   mostraAnteprima();
 }
