@@ -2111,23 +2111,20 @@ function confermaImport(){
   let nuoviCreati=0, docAggiunti=0;
 
   _importData.forEach(item=>{
-    let cid=item.clienteId;
-    
-    // Crea cliente se non esiste
-    if(item.isNuovo){
-      cid='c'+Date.now()+Math.random().toString(36).substr(2,5);
-      db.clienti.push({
-        id:cid,
-        nome:item.nomeCliente,
-        tel:'',tel2:'',email:'',pec:'',ind:'',prof:'',note:'',kdrive:'',
-        polizze:[],
-        documenti:[]
-      });
+    // Cerca sempre fresh nel db per nome (evita problemi di ID obsoleti dopo sync)
+    const nomeNorm=item.nomeCliente.toLowerCase().trim();
+    let c=db.clienti.find(x=>x.nome.toLowerCase().trim()===nomeNorm);
+
+    if(!c){
+      // Cliente non esiste, lo creo
+      const newId='c'+Date.now()+Math.random().toString(36).substr(2,5);
+      const newC={id:newId,nome:item.nomeCliente,tel:'',tel2:'',email:'',pec:'',ind:'',prof:'',note:'',kdrive:'',polizze:[],documenti:[]};
+      db.clienti.push(newC);
+      c=newC;
       nuoviCreati++;
     }
 
     // Aggiungi documenti
-    const c=db.clienti.find(x=>x.id===cid);
     if(!c)return;
     if(!c.documenti)c.documenti=[];
 
