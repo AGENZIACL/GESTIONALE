@@ -1907,69 +1907,93 @@ function parsaNomeFile(filename){
 
 function elaboraCartella(files){
   if(!files||!files.length)return;
-  
-  // Raggruppa per cartella (primo livello del path)
-  const cartelle={};
-  Array.from(files).forEach(f=>{
-    const parts=f.webkitRelativePath.split('/');
-    if(parts.length<2)return; // file nella root, ignoro
-    const cartella=parts[parts.length-2]; // cartella contenitore del file
-    const filename=parts[parts.length-1];
-    if(!filename.toLowerCase().endsWith('.pdf'))return; // solo PDF
-    if(!cartelle[cartella])cartelle[cartella]=[];
-    cartelle[cartella].push(filename);
-  });
 
-  // Ignora cartelle il cui nome è solo un anno o anno tra parentesi
-  function isNomeAnno(nome){
-    const n=nome.trim();
-    if(/^(19|20)\d{2}$/.test(n))return true;      // es. 2025
-    if(/^\((19|20)\d{2}\)$/.test(n))return true; // es. (2025)
-    return false;
+  // Estrae anno tra parentesi dal nome cartella: "COGNOME Nome (2025)" -> "2025"
+  function estraiAnnoCartella(nome){
+    const m=nome.match(/\((19|20)\d{2}\)\s*$/);
+    return m?m[0].replace(/[()]/g,'').trim():'';
   }
 
-  _importData=[];
-  Object.entries(cartelle).forEach(([cartella,files])=>{
-    // Ignora cartelle con nome che è solo un anno
-    if(isNomeAnno(cartella))return;
-    // Cerca cliente esistente per nome cartella
-    const nomeNorm=cartella.trim().toLowerCase();
-    const clienteEsist=db.clienti.find(c=>c.nome.toLowerCase()===nomeNorm);
-    
-    const docs=files.map(function(fn){
+  // Estrae nome cliente da cartella anno: "COGNOME Nome (2025)" -> "COGNOME Nome"
+  function estraiNomeCliente(nome){
+    return nome.replace(/\s*\((19|20)\d{2}\)\s*$/,'').trim();
+  }
+
+  // Verifica se il nome è SOLO un anno: "2025", "(2025)"
+  function isSoloAnno(nome){
+    const n=nome.trim();
+    return /^(19|20)\d{2}$/.test(n)||/^\((19|20)\d{2}\)$/.test(n);
+  }
+
+  // Raggruppa i file per cartella contenitore diretta
+  const cartelleMap={};
+  Array.from(files).forEach(function(f){
+    const parts=f.webkitRelativePath.split('/');
+    if(parts.length<2)return;
+    const filename=parts[parts.length-1];
+    if(!filename.toLowerCase().endsWith('.pdf'))return;
+    // Cartella contenitore diretta del file
+    const cartella=parts[parts.length-2];
+    if(!cartelleMap[cartella])cartelleMap[cartella]=[];
+    cartelleMap[cartella].push(filename);
+  });
+
+  // Costruisce _importData raggruppando per cliente
+  const clientiMap={};
+
+  Object.entries(cartelleMap).forEach(function([cartella,fileList]){
+    if(isSoloAnno(cartella))return; // ignora cartelle come "2025" o "(2025)"
+
+    const annoCartella=estraiAnnoCartella(cartella);
+    // Se la cartella ha un anno tra parentesi → è una sottocartella anno
+    // Il nome cliente si ottiene rimuovendo l'anno
+    const nomeCliente=annoCartella?estraiNomeCliente(cartella):cartella.trim();
+    const anno=annoCartella||'';
+
+    if(!clientiMap[nomeCliente])clientiMap[nomeCliente]=[];
+
+    fileList.forEach(function(fn){
       const parsed=parsaNomeFile(fn);
-      return{
+      // Anno: prima prova quello della cartella, poi quello del filename
+      const annoFinale=annoCartella||parsed.anno||'';
+      clientiMap[nomeCliente].push({
         filename:fn,
         nome:parsed.nomeCompleto||fn.replace(/\.pdf$/i,''),
         tipo:parsed.tipoGest,
         tipoLabel:parsed.tipoDoc,
-        anno:parsed.anno,
+        anno:annoFinale,
+        annoCartella:annoCartella,
         numeroPolizza:parsed.numeroPolizza,
         intermediario:parsed.intermediario,
         compagnia:parsed.compagnia,
         tipologia:parsed.tipologia,
         link:''
-      };
+      });
     });
+  });
 
+  _importData=[];
+  Object.entries(clientiMap).forEach(function([nomeCliente,docs]){
+    const nomeNorm=nomeCliente.toLowerCase();
+    const clienteEsist=db.clienti.find(function(c){return c.nome.toLowerCase()===nomeNorm;});
     _importData.push({
-      nomeCliente:cartella,
+      nomeCliente:nomeCliente,
       clienteId:clienteEsist?clienteEsist.id:null,
       isNuovo:!clienteEsist,
-      docs
+      docs:docs
     });
   });
 
   mostraAnteprima();
 }
 
+
 function generaStruttura(){
-  // Genera struttura cartelle per anno/categoria da creare su kDrive
   const struttura={};
   _importData.forEach(function(item){
-    struttura[item.nomeCliente]={};
+    if(!struttura[item.nomeCliente])struttura[item.nomeCliente]={};
     item.docs.forEach(function(d){
-      const anno=d.anno||'Senza anno';
+      const anno=d.annoCartella||d.anno||'Senza anno';
       const cat=d.tipologia||d.tipoLabel||'Generale';
       if(!struttura[item.nomeCliente][anno])struttura[item.nomeCliente][anno]=new Set();
       struttura[item.nomeCliente][anno].add(cat);
