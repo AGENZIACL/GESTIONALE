@@ -1920,8 +1920,18 @@ function elaboraCartella(files){
     cartelle[cartella].push(filename);
   });
 
+  // Ignora cartelle il cui nome è solo un anno o anno tra parentesi
+  function isNomeAnno(nome){
+    const n=nome.trim();
+    if(/^(19|20)\d{2}$/.test(n))return true;      // es. 2025
+    if(/^\((19|20)\d{2}\)$/.test(n))return true; // es. (2025)
+    return false;
+  }
+
   _importData=[];
   Object.entries(cartelle).forEach(([cartella,files])=>{
+    // Ignora cartelle con nome che è solo un anno
+    if(isNomeAnno(cartella))return;
     // Cerca cliente esistente per nome cartella
     const nomeNorm=cartella.trim().toLowerCase();
     const clienteEsist=db.clienti.find(c=>c.nome.toLowerCase()===nomeNorm);
