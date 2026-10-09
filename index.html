@@ -1329,86 +1329,78 @@ let docClienteId=null,docEditId=null;
 function sezioneDocumenti(c){
   const docs=c.documenti||[];
   const annoCorrente=new Date().getFullYear().toString();
-  let html='<div class="docs-section">'
-    +'<div class="docs-title">'
-    +'<span><i class="ti ti-folder" style="font-size:13px"></i> Documenti ('+docs.length+')</span>'
-    +'<button class="btn-add-doc" onclick="apriModalDoc(this.dataset.cid)" data-cid="'+c.id+'"><i class="ti ti-plus"></i> Aggiungi</button>'
-    +'</div>';
+  const uid=c.id;
+  const parts=[];
+  parts.push('<div class="docs-section">');
+  parts.push('<div class="docs-title">');
+  parts.push('<span><i class="ti ti-folder" style="font-size:13px"></i> Documenti ('+docs.length+')</span>');
+  parts.push('<button class="btn-add-doc" data-cid="'+uid+'" onclick="apriModalDoc(this.dataset.cid)"><i class="ti ti-plus"></i> Aggiungi</button>');
+  parts.push('</div>');
 
   if(docs.length){
-    // Raggruppa per anno poi categoria
     const gruppi={};
-    docs.forEach(doc=>{
-      const anno=doc.anno||'Senza anno';
-      const cat=doc.categoria||'Generale';
+    docs.forEach(function(doc){
+      var anno=doc.anno||'Senza anno';
+      var cat=doc.categoria||'Generale';
       if(!gruppi[anno])gruppi[anno]={};
       if(!gruppi[anno][cat])gruppi[anno][cat]=[];
       gruppi[anno][cat].push(doc);
     });
-
-    const tipoLbl={identita:'Identità/CF',polizza:'Polizza',contratto:'Contratto',fascicolo:'Fascicolo informativo',corrispondenza:'Corrispondenza',generico:'',altro:''};
-    const anni=Object.keys(gruppi).sort((a,b)=>b.localeCompare(a));
-    const uid=c.id; // per ID univoci nei toggle
-
-    html+='<div class="doc-tree">';
-    anni.forEach((anno,ai)=>{
-      const isAnnoAperto=anno===annoCorrente||ai===0;
-      const totAnno=Object.values(gruppi[anno]).reduce((s,d)=>s+d.length,0);
-      const annoId='dt-'+uid+'-'+anno.replace(/\s/g,'_');
-
-      html+='<div class="doc-tree-anno">'
-        +'<div class="doc-tree-anno-header'+(isAnnoAperto?' open':'')+'" onclick="toggleDocTree(''+annoId+'')" id="h-'+annoId+'">'
-        +'<i class="ti ti-calendar" style="font-size:14px;color:#185FA5"></i>'
-        +'<span class="anno-label">'+anno+'</span>'
-        +'<span class="anno-count">'+totAnno+' doc'+( totAnno!==1?'umenti':'umento')+'</span>'
-        +'<i class="ti ti-chevron-right chevron"></i>'
-        +'</div>'
-        +'<div class="doc-tree-anno-body'+(isAnnoAperto?' open':'')+'" id="'+annoId+'">';
-
-      const cats=Object.keys(gruppi[anno]).sort();
-      cats.forEach((cat,ci)=>{
-        const catId='dc-'+uid+'-'+anno.replace(/\s/g,'_')+'-'+ci;
-        const isCatAperta=isAnnoAperto;
-        const ndoc=gruppi[anno][cat].length;
-
-        html+='<div class="doc-tree-cat">'
-          +'<div class="doc-tree-cat-header'+(isCatAperta?' open':'')+'" onclick="toggleDocTree(''+catId+'')" id="h-'+catId+'">'
-          +'<i class="ti ti-folder" style="font-size:13px;color:#854F0B"></i>'
-          +'<span class="cat-label">'+cat+'</span>'
-          +'<span class="cat-count">'+ndoc+'</span>'
-          +'<i class="ti ti-chevron-right chevron-cat"></i>'
-          +'</div>'
-          +'<div class="doc-tree-cat-body'+(isCatAperta?' open':'')+'" id="'+catId+'">'
-          +'<div class="docs-list">';
-
-        gruppi[anno][cat].forEach(doc=>{
-          const ico=docIcona(doc.tipo);
-          const tl=tipoLbl[doc.tipo]||'';
-          html+='<div class="doc-row">'
-            +'<i class="'+ico.cls+' doc-icon '+ico.color+'"></i>'
-            +'<div class="doc-info">'
-            +'<div class="doc-nome" title="'+doc.nome+'">'+doc.nome+'</div>'
-            +(tl?'<div class="doc-tipo">'+tl+'</div>':'')
-            +'</div>'
-            +'<div class="doc-actions">'
-            +(doc.link?'<a href="'+doc.link+'" target="_blank" rel="noopener" class="open-btn"><i class="ti ti-external-link"></i> Apri</a>':'')
-            +'<button onclick="eliminaDocumento(''+c.id+'',''+doc.id+'')" class="del-doc"><i class="ti ti-trash"></i></button>'
-            +'</div>'
-            +'</div>';
+    const tipoLbl={identita:'Identita/CF',polizza:'Polizza',contratto:'Contratto',fascicolo:'Fascicolo informativo',corrispondenza:'Corrispondenza',generico:'',altro:''};
+    const anni=Object.keys(gruppi).sort(function(a,b){return b.localeCompare(a);});
+    parts.push('<div class="doc-tree">');
+    anni.forEach(function(anno,ai){
+      var isOpen=anno===annoCorrente||ai===0;
+      var totAnno=Object.values(gruppi[anno]).reduce(function(s,d){return s+d.length;},0);
+      var annoId='dt-'+uid+'-a'+ai;
+      parts.push('<div class="doc-tree-anno">');
+      parts.push('<div class="doc-tree-anno-header'+(isOpen?' open':'')+'" id="h-'+annoId+'" data-tid="'+annoId+'" onclick="toggleDocTree(this.dataset.tid)">');
+      parts.push('<i class="ti ti-calendar" style="font-size:14px;color:#185FA5"></i>');
+      parts.push('<span class="anno-label">'+anno+'</span>');
+      parts.push('<span class="anno-count">'+totAnno+' doc'+(totAnno!==1?'umenti':'umento')+'</span>');
+      parts.push('<i class="ti ti-chevron-right chevron"></i>');
+      parts.push('</div>');
+      parts.push('<div class="doc-tree-anno-body'+(isOpen?' open':'')+'" id="'+annoId+'">');
+      var cats=Object.keys(gruppi[anno]).sort();
+      cats.forEach(function(cat,ci){
+        var catId='dc-'+uid+'-a'+ai+'-c'+ci;
+        var ndoc=gruppi[anno][cat].length;
+        parts.push('<div class="doc-tree-cat">');
+        parts.push('<div class="doc-tree-cat-header'+(isOpen?' open':'')+'" id="h-'+catId+'" data-tid="'+catId+'" onclick="toggleDocTree(this.dataset.tid)">');
+        parts.push('<i class="ti ti-folder" style="font-size:13px;color:#854F0B"></i>');
+        parts.push('<span class="cat-label">'+cat+'</span>');
+        parts.push('<span class="cat-count">'+ndoc+'</span>');
+        parts.push('<i class="ti ti-chevron-right chevron-cat"></i>');
+        parts.push('</div>');
+        parts.push('<div class="doc-tree-cat-body'+(isOpen?' open':'')+'" id="'+catId+'">');
+        parts.push('<div class="docs-list">');
+        gruppi[anno][cat].forEach(function(doc){
+          var ico=docIcona(doc.tipo);
+          var tl=tipoLbl[doc.tipo]||'';
+          parts.push('<div class="doc-row">');
+          parts.push('<i class="'+ico.cls+' doc-icon '+ico.color+'"></i>');
+          parts.push('<div class="doc-info">');
+          parts.push('<div class="doc-nome" title="'+doc.nome+'">'+doc.nome+'</div>');
+          if(tl)parts.push('<div class="doc-tipo">'+tl+'</div>');
+          parts.push('</div>');
+          parts.push('<div class="doc-actions">');
+          if(doc.link)parts.push('<a href="'+doc.link+'" target="_blank" rel="noopener" class="open-btn"><i class="ti ti-external-link"></i> Apri</a>');
+          parts.push('<button class="del-doc" data-cid="'+c.id+'" data-did="'+doc.id+'" onclick="eliminaDocumento(this.dataset.cid,this.dataset.did)"><i class="ti ti-trash"></i></button>');
+          parts.push('</div></div>');
         });
-        html+='</div></div></div>';
+        parts.push('</div></div></div>');
       });
-      html+='</div></div>';
+      parts.push('</div></div>');
     });
-    html+='</div>';
+    parts.push('</div>');
   } else {
-    html+='<div style="font-size:12px;color:var(--text3);font-style:italic;margin-bottom:6px">Nessun documento collegato.</div>';
+    parts.push('<div style="font-size:12px;color:var(--text3);font-style:italic;margin-bottom:6px">Nessun documento collegato.</div>');
   }
-  html+='<div class="kdrive-hint"><i class="ti ti-cloud" style="font-size:13px;flex-shrink:0;color:#0070CC"></i>'
-    +'<span>Documenti su <strong>kDrive</strong> nella cartella <strong>'+c.nome+'/[Anno]/[Categoria]</strong>.</span></div>';
-  html+='</div>';
-  return html;
+  parts.push('<div class="kdrive-hint"><i class="ti ti-cloud" style="font-size:13px;flex-shrink:0;color:#0070CC"></i><span>Documenti su <strong>kDrive</strong> nella cartella <strong>'+c.nome+'/[Anno]/[Categoria]</strong>.</span></div>');
+  parts.push('</div>');
+  return parts.join('');
 }
+
 
 function toggleDocTree(id){
   const body=document.getElementById(id);
