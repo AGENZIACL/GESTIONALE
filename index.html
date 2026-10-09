@@ -228,6 +228,14 @@ textarea{resize:vertical;height:55px}
 .cont-stat-num{font-size:18px;font-weight:500;color:var(--text)}
 .cont-stat-num.blu{color:#185FA5}
 .anno-filter{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+/* ===== STRUTTURA CARTELLE ===== */
+.cartelle-tree{font-family:monospace;font-size:12px;background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r);padding:.75rem 1rem;max-height:300px;overflow-y:auto;margin-bottom:.75rem;line-height:1.8;color:var(--text2)}
+.cartelle-tree .folder{color:#185FA5;font-weight:500}
+.cartelle-tree .subfolder{color:#854F0B}
+.cartelle-tree .subsubfolder{color:#3B6D11}
+.copy-btn{font-size:12px;padding:5px 12px;border-radius:var(--r);border:0.5px solid var(--border2);background:none;cursor:pointer;color:var(--text2);font-family:var(--font);display:inline-flex;align-items:center;gap:5px}
+.copy-btn:hover{background:var(--bg2);color:var(--text)}
+.copy-btn.copied{border-color:#3B6D11;color:#3B6D11}
 /* ===== ALBERO DOCUMENTI ===== */
 .doc-tree{margin-bottom:.5rem}
 .doc-tree-anno{border:0.5px solid var(--border);border-radius:var(--r);margin-bottom:6px;overflow:hidden}
@@ -671,6 +679,24 @@ textarea{resize:vertical;height:55px}
 
     <div id="import-step2" style="display:none">
       <div class="import-summary" id="import-summary"></div>
+
+      <!-- STRUTTURA CARTELLE DA CREARE -->
+      <div id="import-cartelle-box" style="display:none;margin-bottom:1rem">
+        <div style="font-size:13px;font-weight:500;margin-bottom:.5rem;display:flex;align-items:center;gap:6px">
+          <i class="ti ti-folder-plus" style="color:#185FA5"></i>
+          Struttura cartelle da creare su kDrive
+        </div>
+        <div class="cartelle-tree" id="import-cartelle-tree"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:.75rem">
+          <button class="copy-btn" id="btn-copia-cartelle" onclick="copiaStruttura()">
+            <i class="ti ti-copy"></i> Copia struttura
+          </button>
+          <a href="https://kdrive.infomaniak.com" target="_blank" rel="noopener" class="copy-btn" style="text-decoration:none">
+            <i class="ti ti-external-link"></i> Apri kDrive
+          </a>
+        </div>
+      </div>
+
       <div class="import-preview" id="import-preview"></div>
       <div class="modal-footer">
         <button class="btn-sec" onclick="resetImport()"><i class="ti ti-arrow-left"></i> Ricomincia</button>
@@ -1410,6 +1436,21 @@ function toggleDocTree(id){
   body.classList.toggle('open');
   header.classList.toggle('open');
 }
+
+function copiaStruttura(){
+  if(!_strutturaCartelle)return;
+  navigator.clipboard.writeText(_strutturaCartelle).then(function(){
+    const btn=document.getElementById('btn-copia-cartelle');
+    if(btn){btn.classList.add('copied');btn.innerHTML='<i class="ti ti-check"></i> Copiato!';setTimeout(function(){btn.classList.remove('copied');btn.innerHTML='<i class="ti ti-copy"></i> Copia struttura';},2000);}
+  }).catch(function(){
+    // Fallback per browser che non supportano clipboard API
+    const ta=document.createElement('textarea');
+    ta.value=_strutturaCartelle;
+    document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
+    const btn=document.getElementById('btn-copia-cartelle');
+    if(btn){btn.classList.add('copied');btn.innerHTML='<i class="ti ti-check"></i> Copiato!';setTimeout(function(){btn.classList.remove('copied');btn.innerHTML='<i class="ti ti-copy"></i> Copia struttura';},2000);}
+  });
+}
 function docIcona(tipo){if(tipo==='polizza'||tipo==='contratto'||tipo==='fascicolo')return{cls:'ti ti-file-type-pdf',color:'pdf'};if(tipo==='identita')return{cls:'ti ti-id',color:'img'};if(tipo==='corrispondenza')return{cls:'ti ti-mail',color:'word'};return{cls:'ti ti-file',color:'generic'};}
 function apriModalDoc(cid,did){
   docClienteId=cid;docEditId=did||null;
@@ -1912,6 +1953,23 @@ function elaboraCartella(files){
   mostraAnteprima();
 }
 
+function generaStruttura(){
+  // Genera struttura cartelle per anno/categoria da creare su kDrive
+  const struttura={};
+  _importData.forEach(function(item){
+    struttura[item.nomeCliente]={};
+    item.docs.forEach(function(d){
+      const anno=d.anno||'Senza anno';
+      const cat=d.tipologia||d.tipoLabel||'Generale';
+      if(!struttura[item.nomeCliente][anno])struttura[item.nomeCliente][anno]=new Set();
+      struttura[item.nomeCliente][anno].add(cat);
+    });
+  });
+  return struttura;
+}
+
+let _strutturaCartelle='';
+
 function mostraAnteprima(){
   const nuovi=_importData.filter(x=>x.isNuovo).length;
   const esist=_importData.filter(x=>!x.isNuovo).length;
@@ -1921,6 +1979,33 @@ function mostraAnteprima(){
     `Trovate <strong>${_importData.length} cartelle</strong> con <strong>${totDocs} documenti PDF</strong>. `+
     `<strong>${nuovi}</strong> client${nuovi!==1?'i':'e'} nuov${nuovi!==1?'i':'o'} da creare · `+
     `<strong>${esist}</strong> client${esist!==1?'i':'e'} già esistenti.`;
+
+  // Genera e mostra struttura cartelle
+  const struttura=generaStruttura();
+  const clienti=Object.keys(struttura).sort();
+  const righeHTML=[];
+  const righeTesto=[];
+  clienti.forEach(function(cliente){
+    righeHTML.push('<div><span class="folder">📁 '+cliente+'/</span></div>');
+    righeTesto.push('📁 '+cliente+'/');
+    const anni=Object.keys(struttura[cliente]).sort().reverse();
+    anni.forEach(function(anno){
+      righeHTML.push('<div style="padding-left:1.5rem"><span class="subfolder">📁 '+anno+'/</span></div>');
+      righeTesto.push('   📁 '+anno+'/');
+      struttura[cliente][anno].forEach(function(cat){
+        righeHTML.push('<div style="padding-left:3rem"><span class="subsubfolder">📁 '+cat+'/</span></div>');
+        righeTesto.push('      📁 '+cat+'/');
+      });
+    });
+  });
+  _strutturaCartelle=righeTesto.join('
+');
+  const box=document.getElementById('import-cartelle-box');
+  const tree=document.getElementById('import-cartelle-tree');
+  if(box&&tree&&righeHTML.length){
+    tree.innerHTML=righeHTML.join('');
+    box.style.display='block';
+  }
 
   const tipoLabel={polizza:'Polizza',contratto:'Quietanza',fascicolo:'Fascicolo/DIP',identita:'Identità',corrispondenza:'Corrispondenza',generico:'Generico'};
 
