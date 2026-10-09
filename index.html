@@ -2131,10 +2131,10 @@ function confermaImport(){
     if(!c)return;
     if(!c.documenti)c.documenti=[];
 
-    item.docs.forEach(d=>{
+    item.docs.forEach((d,di)=>{
       if(c.documenti.some(doc=>doc.nome===d.nome))return;
       c.documenti.push({
-        id:'d'+Date.now()+Math.random().toString(36).substr(2,5),
+        id:'d'+(Date.now()+di)+Math.random().toString(36).substr(2,9),
         nome:d.nome,
         tipo:d.tipo,
         anno:d.anno||'',
@@ -2149,20 +2149,21 @@ function confermaImport(){
     });
   });
 
+  console.log('Import completato: clienti='+nuoviCreati+', docs='+docAggiunti);
   save();
   aggiornaAnniStats();
   renderStats();
   renderClienti();
   addLog('add',`Importazione cartella: ${nuoviCreati} clienti creati, ${docAggiunti} documenti aggiunti`);
   
-  msg.className='form-msg ok';
-  msg.textContent=`✓ Importazione completata: ${nuoviCreati} clienti creati, ${docAggiunti} documenti aggiunti.`;
+  if(msg){msg.className='form-msg ok';msg.textContent='✓ Importazione completata: '+nuoviCreati+' clienti creati, '+docAggiunti+' documenti aggiunti.';}
   document.getElementById('btn-conferma-import').disabled=true;
+  document.getElementById('btn-conferma-import').innerHTML='<i class="ti ti-check"></i> Importato!';
   
   setTimeout(()=>{
     chiudiModal('modal-import');
     switchTab('clienti');
-  },2000);
+  },1500);
 }
 
 
