@@ -1332,7 +1332,7 @@ function sezioneDocumenti(c){
   let html='<div class="docs-section">'
     +'<div class="docs-title">'
     +'<span><i class="ti ti-folder" style="font-size:13px"></i> Documenti ('+docs.length+')</span>'
-    +'<button class="btn-add-doc" onclick="apriModalDoc(''+c.id+'')"><i class="ti ti-plus"></i> Aggiungi</button>'
+    +'<button class="btn-add-doc" onclick="apriModalDoc(this.dataset.cid)" data-cid="'+c.id+'"><i class="ti ti-plus"></i> Aggiungi</button>'
     +'</div>';
 
   if(docs.length){
