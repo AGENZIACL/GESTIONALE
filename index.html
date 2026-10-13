@@ -754,7 +754,7 @@ textarea{resize:vertical;height:55px}
         <select id="p-contratto"><option value="nuovo">Nuovo contratto</option><option value="rinnovo">Rinnovo</option></select>
       </div>
       <div class="form-group"><label>Stato polizza</label>
-        <select id="p-stato"><option value="viva">Viva</option><option value="rinnovata">Rinnovata</option><option value="annullata">Annullata</option></select>
+        <select id="p-stato" onchange="togglePromemoria(this.value)"><option value="viva">Viva</option><option value="rinnovata">Rinnovata</option><option value="annullata">Annullata</option></select>
       </div>
       <div class="form-group"><label>Decorrenza</label><input type="date" id="p-dec"></div>
       <div class="form-group"><label>Scadenza *</label><input type="date" id="p-scad" oninput="sugPromo()"></div>
@@ -836,7 +836,7 @@ textarea{resize:vertical;height:55px}
     </div>
 
     <!-- PROMEMORIA -->
-    <div class="section-box">
+    <div class="section-box" id="promo-box">
       <div class="section-box-title">
         <i class="ti ti-bell"></i> Promemoria di contatto
         <button class="btn-sec" onclick="sugPromo()" style="font-size:11px;padding:3px 10px;margin-left:auto"><i class="ti ti-wand"></i> Suggerisci (60 / 45 / 30 gg)</button>
@@ -974,6 +974,12 @@ function aggiornaBtnDoc(){
   if(v&&v.startsWith('http')){btn.href=v;btn.classList.remove('disabled');}
   else{btn.href='#';btn.classList.add('disabled');}
 }
+function togglePromemoria(stato){
+  const box=document.getElementById('promo-box');
+  if(!box)return;
+  box.style.display=(stato==='rinnovata'||stato==='annullata')?'none':'block';
+}
+
 function aggiornaBtnPolizza(){
   const v=document.getElementById('p-kdrive').value.trim();
   const btn=document.getElementById('p-kdrive-btn');
@@ -1280,6 +1286,7 @@ function apriModalPolizza(cid,pid){
     campiBase.forEach(f=>document.getElementById('p-'+f).value='');
   }
   aggiornaBtnPolizza();aggiornaBtnFI();aggiornaBtnDIP();aggiornaBtnDIPA();
+  togglePromemoria(document.getElementById('p-stato').value);
   document.getElementById('modal-polizza').style.display='flex';
 }
 
@@ -1703,7 +1710,7 @@ function sezioneContabileCliente(c){
   const {polizze,tot}=calcolaContabilitaCliente(c,annoFiltro);
   if(!polizze.length)return'';
   const totComp=tot.lettera+tot.fattura+tot.fatturainterm+tot.provv;
-  const totGen=tot.premio+totComp;
+  const totGen=tot.premio+tot.quota+tot.lettera+tot.fattura+tot.fatturainterm; // totale incassato senza provvigioni
 
   let righe=polizze.map(p=>{
     const tip=tipById(p.tipo);
@@ -1786,7 +1793,7 @@ function renderContabilita(){
   const totTot=totGen.premio+totGen.lettera+totGen.fattura+totGen.fatturainterm+totGen.provv;
 
   // Statistiche
-  const totIncassatoGen=totGen.premio+totGen.quota+totGen.lettera+totGen.fattura+totGen.fatturainterm;
+  const totIncassatoGen=totGen.premio+totGen.quota+totGen.lettera+totGen.fattura+totGen.fatturainterm; // escluse provvigioni
   const totRimesseGen=totGen.premio+totGen.quota-totGen.provv;
   const totFattGen=totGen.fattura+totGen.fatturainterm;
   statsEl.innerHTML=
