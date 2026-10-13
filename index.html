@@ -1202,7 +1202,7 @@ function rigaPolizza(c,p){
   else if(p.stato==='rinnovata')rowCls+='rinnovata';
   else rowCls+='viva-'+(ss?ss.cls:'ok');
   const gt=p.stato==='annullata'?`Scad. ${fmtD(p.scad)}`:p.stato==='rinnovata'?`Rinnovata · scad. ${fmtD(p.scad)}`:(ss.d<0?`Scaduta da ${Math.abs(ss.d)} gg`:ss.d===0?'Scade oggi!':ss.d<=30?`Scade tra ${ss.d} gg`:`Scad. ${fmtD(p.scad)}`);
-  const prTags=isAttiva?tuttiPromo(p).map(pr=>`<span class="promo-tag ${pr.cls}" title="${pr.campo}: ${fmtD(pr.data)}">${pr.campo} ${pr.cls==='att'?'⚠ '+pr.label:pr.cls==='ogg'?'📞 oggi':pr.label}</span>`).join(''):'';
+  const prTags=(p.stato==='viva')?tuttiPromo(p).map(pr=>`<span class="promo-tag ${pr.cls}" title="${pr.campo}: ${fmtD(pr.data)}">${pr.campo} ${pr.cls==='att'?'⚠ '+pr.label:pr.cls==='ogg'?'📞 oggi':pr.label}</span>`).join(''):'';
   const econVoci=[];
   if(puo('econ')){if(p.fattura)econVoci.push(`Fattura: ${fmtE(p.fatturaImp)}`);if(p.lettera)econVoci.push(`Lettera: ${fmtE(p.letteraImp)}`);if(p.fatturainterm)econVoci.push(`Fatt. interm.: ${fmtE(p.fatturaIntermImp)}`);if(p.provv)econVoci.push(`Provvigioni: ${fmtE(p.provvImp)}`);}
   const kdrivePolizza=p.kdrive?`<a href="${p.kdrive}" target="_blank" rel="noopener" class="kdrive-link" title="Contratto/Quietanza"><i class="ti ti-file-invoice"></i> Contratto</a>`:'';
