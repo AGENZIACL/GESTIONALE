@@ -1720,7 +1720,7 @@ function sezioneContabileCliente(c){
     const fat=p.fattura?(parseFloat(p.fatturaImp)||0):0;
     const fi=p.fatturainterm?(parseFloat(p.fatturaIntermImp)||0):0;
     const pv=p.provv?(parseFloat(p.provvImp)||0):0;
-    const totP=pr+qt+let_+fat+fi+pv;
+    const totP=pr+qt+let_+fat+fi; // totale senza provvigioni
     return '<tr>'
       +'<td>'+tip.nome+(p.num?' <span style="font-size:10px;color:var(--text3)">'+p.num+'</span>':'')+'</td>'
       +'<td class="num">'+(pr?fmtE(pr):'<span class="zero">—</span>')+'</td>'
@@ -1773,7 +1773,7 @@ function renderContabilita(){
     totGen.provv+=tot.provv;
     totGen.clienti++;
     totGen.polizze+=polizze.length;
-    const totC=tot.premio+tot.lettera+tot.fattura+tot.fatturainterm+tot.provv;
+    const totC=tot.premio+tot.quota+tot.lettera+tot.fattura+tot.fatturainterm; // senza provvigioni
     const totIncassato=tot.premio+tot.quota+tot.lettera+tot.fattura+tot.fatturainterm;
     const totRimessa=tot.premio+tot.quota-tot.provv;
     righeClienti.push(
@@ -1790,7 +1790,7 @@ function renderContabilita(){
     );
   });
 
-  const totTot=totGen.premio+totGen.lettera+totGen.fattura+totGen.fatturainterm+totGen.provv;
+  const totTot=totGen.premio+totGen.quota+totGen.lettera+totGen.fattura+totGen.fatturainterm; // senza provvigioni
 
   // Statistiche
   const totIncassatoGen=totGen.premio+totGen.quota+totGen.lettera+totGen.fattura+totGen.fatturainterm; // escluse provvigioni
